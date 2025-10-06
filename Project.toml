@@ -1,0 +1,38 @@
+name = "RtcFramework"
+uuid = "942aeb66-1abd-4b3e-88de-97d1762fce18"
+authors = ["Darryl Gamroth <dgamroth@rubus.ca>"]
+version = "0.1.0"
+
+[deps]
+Aeron = "b850ffb1-6704-484e-996b-4710e2f097f0"
+Agent = "f7939a7f-2bcc-4096-952b-c44031b5533b"
+Clocks = "6b5ade5d-6e95-4584-b343-73eec2e8782b"
+EnumX = "4e289a0a-7415-4d19-859d-a7e5c4648b56"
+Hsm = "ae4ab49b-60bf-4949-b8fd-fb49b1a0d067"
+Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
+SnowflakeId = "f9ebe2b0-2178-47c6-b9d1-20f9bee126a8"
+SpidersFragmentFilters = "8c1bab52-a7d1-42b0-bb60-b0a7d7edcd1b"
+SpidersMessageCodecs = "9d30338e-3560-4e91-a403-22803ac6b660"
+StaticKV = "5c25fbc6-c823-4e8d-82ee-a726f35d2972"
+UnsafeArrays = "c4a57d5a-5b31-53a6-b365-19f8c011fbd6"
+WrappedUnions = "325db55a-9c6c-5b90-b1a2-ec87e7a38c44"
+
+[compat]
+Aeron = "0.18"
+Agent = "0.3"
+Clocks = "0.2"
+EnumX = "1"
+Hsm = "0.1"
+Logging = "1.11"
+SnowflakeId = "0.1"
+SpidersFragmentFilters = "0.4"
+SpidersMessageCodecs = "0.12"
+StaticKV = "0.6"
+UnsafeArrays = "1"
+WrappedUnions = "0.3"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
