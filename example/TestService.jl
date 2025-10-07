@@ -1,27 +1,13 @@
 module TestService
 
-using RtcFramework
-
 using Aeron
 using Agent
 using Clocks
 using Hsm
 using Logging
+using RtcFramework
 using StaticKV
 using ThreadPinning
-
-ENV["STATUS_URI"] = "aeron:udp?endpoint=0.0.0.0:40123"
-ENV["STATUS_STREAM_ID"] = "1"
-ENV["CONTROL_URI"] = "aeron-spy:aeron:udp?endpoint=0.0.0.0:40123"
-ENV["CONTROL_STREAM_ID"] = "2"
-ENV["CONTROL_FILTER"] = "TestService"
-ENV["PUB_DATA_URI_1"] = "aeron:udp?endpoint=localhost:40123|term-length=128m"
-ENV["PUB_DATA_STREAM_1"] = "12"
-ENV["BLOCK_NAME"] = "TestService"
-ENV["BLOCK_ID"] = "367"
-ENV["SUB_DATA_URI_1"] = "aeron:udp?endpoint=0.0.0.0:40123"
-ENV["SUB_DATA_STREAM_1"] = "4"
-ENV["LOG_LEVEL"] = "Debug"
 
 include("myagent.jl")
 include("kvstore.jl")

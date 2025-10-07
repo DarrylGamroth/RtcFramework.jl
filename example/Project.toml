@@ -1,0 +1,9 @@
+[deps]
+Aeron = "b850ffb1-6704-484e-996b-4710e2f097f0"
+Agent = "f7939a7f-2bcc-4096-952b-c44031b5533b"
+Clocks = "6b5ade5d-6e95-4584-b343-73eec2e8782b"
+Hsm = "ae4ab49b-60bf-4949-b8fd-fb49b1a0d067"
+Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
+RtcFramework = "942aeb66-1abd-4b3e-88de-97d1762fce18"
+StaticKV = "5c25fbc6-c823-4e8d-82ee-a726f35d2972"
+ThreadPinning = "811555cd-349b-4f26-b7bc-1f208b848042"
