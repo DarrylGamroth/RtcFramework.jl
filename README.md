@@ -156,6 +156,50 @@ schedule_at!(base(agent).timers, specific_timestamp_ns, :AbsoluteTimer)
 cancel!(base(agent).timers, :OneSecondTimer)
 ```
 
+### Custom Pollers
+
+The framework includes a unified poller system that executes work in priority order during each `do_work` cycle. You can register custom pollers to extend the agent's behavior:
+
+```julia
+# Register a custom poller with priority
+# Lower priority numbers = higher priority (runs first)
+# Built-in priorities: input=10, property=50, timer=75, control=200
+register_poller!(agent, 25, name=:custom_sensor) do agent
+    # Your polling logic here
+    work_count = poll_custom_sensor(agent)
+    return work_count  # Must return Int
+end
+
+# Register with a named function
+function my_custom_poller(agent::AbstractRtcAgent)
+    # Poll custom hardware, check queues, etc.
+    work_done = 0
+    if check_some_condition()
+        process_work()
+        work_done += 1
+    end
+    return work_done
+end
+register_poller!(my_custom_poller, agent, 100, name=:my_poller)
+
+# Manage pollers
+unregister_poller!(agent, :my_poller)           # Remove specific poller
+list_pollers(agent)                             # Get all registered pollers
+clear_pollers!(agent)                           # Remove all pollers (including built-ins!)
+
+# Note: Built-in pollers are automatically registered during on_start:
+# - :input_streams (priority 10) - Poll input data streams
+# - :properties (priority 50) - Publish registered properties
+# - :timers (priority 75) - Process timer events
+# - :control_stream (priority 200) - Poll control messages
+```
+
+**Poller Requirements:**
+- Must have signature `(agent::AbstractRtcAgent) -> Int`
+- Must return number of work items processed
+- Pollers with same priority execute in registration order (FIFO)
+- Custom pollers can be registered at any priority between built-ins
+
 ### Event Dispatch
 
 Handle custom events by implementing `@on_event` handlers for your agent:

@@ -4,6 +4,7 @@ using Aeron
 using Agent
 using Clocks
 using EnumX
+using FunctionWrappers: FunctionWrapper
 using Hsm
 using Logging
 using SnowflakeId
@@ -22,6 +23,7 @@ const DEFAULT_CONTROL_FRAGMENT_COUNT_LIMIT = 1
 include("exceptions.jl")
 include("property_utilities.jl")
 include("abstract_agent.jl")
+include("pollers.jl")
 include("communication_resources.jl")
 include("adapters/adapters.jl")
 include("proxies/proxies.jl")
@@ -38,6 +40,10 @@ include("precompile.jl")
 # Property system
 export @base_properties
 export PropertyError, PropertyNotFoundError, EnvironmentVariableError
+
+# Poller system
+export register_poller!, unregister_poller!, clear_pollers!, list_pollers
+export PollerFunction, PollerConfig
 
 # Core types
 export AbstractRtcAgent, BaseRtcAgent, base

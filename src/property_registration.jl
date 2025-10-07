@@ -103,6 +103,20 @@ isregistered(agent::AbstractRtcAgent, field::Symbol) = any(config -> config.fiel
 isregistered(agent::AbstractRtcAgent, field::Symbol, stream_index::Int) = any(config -> config.field == field && config.stream_index == stream_index, base(agent).property_registry)
 
 """
+    Base.empty!(agent::AbstractRtcAgent) -> Int
+
+Clear all registered property publications.
+
+Returns the number of registrations removed.
+"""
+function Base.empty!(agent::AbstractRtcAgent)
+    b = base(agent)
+    count = length(b.property_registry)
+    empty!(b.property_registry)
+    return count
+end
+
+"""
     should_poll_properties(agent::AbstractRtcAgent) -> Bool
 
 Determine whether property polling should be active based on agent state.

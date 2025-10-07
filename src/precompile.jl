@@ -204,14 +204,33 @@ function _precompile_rtcframework()
     precompile(Tuple{typeof(Base.isopen),CommunicationResources})
 
     # =============================================================================
+    # Poller System - Type-Stable Unified Polling
+    # =============================================================================
+
+    # Poller registration and management
+    precompile(Tuple{typeof(register_poller!),Function,AbstractRtcAgent,Int,Symbol})
+    precompile(Tuple{typeof(unregister_poller!),AbstractRtcAgent,Symbol})
+    precompile(Tuple{typeof(clear_pollers!),AbstractRtcAgent})
+    precompile(Tuple{typeof(list_pollers),AbstractRtcAgent})
+
+    # PollerConfig construction
+    precompile(Tuple{typeof(PollerConfig),PollerFunction,Int,Symbol})
+
+    # FunctionWrapper construction for pollers
+    precompile(Tuple{Type{FunctionWrapper{Int,Tuple{AbstractRtcAgent}}},Function})
+
+    # =============================================================================
     # Message Handlers and Pollers
     # =============================================================================
 
-    # Polling functions
+    # Built-in polling functions
     precompile(Tuple{typeof(input_poller),AbstractRtcAgent})
     precompile(Tuple{typeof(control_poller),AbstractRtcAgent})
     precompile(Tuple{typeof(timer_poller),AbstractRtcAgent})
     precompile(Tuple{typeof(property_poller),AbstractRtcAgent})
+    
+    # Built-in poller registration
+    precompile(Tuple{typeof(register_builtin_pollers!),AbstractRtcAgent})
 
     # =============================================================================
     # Timer System Hot Paths

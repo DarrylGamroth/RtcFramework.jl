@@ -24,6 +24,7 @@ transitions. Generic parameters allow customization of core components.
 - `control_adapter::Union{Nothing,ControlStreamAdapter}`: control message handler
 - `input_adapters::Vector{InputStreamAdapter}`: input stream processors
 - `property_registry::Vector{PublicationConfig}`: registered property configs
+- `pollers::Vector{PollerConfig}`: registered pollers in priority order
 """
 mutable struct BaseRtcAgent{C<:AbstractClock,P<:AbstractStaticKV,ID<:SnowflakeIdGenerator,ET<:PolledTimer}
     clock::C
@@ -37,6 +38,7 @@ mutable struct BaseRtcAgent{C<:AbstractClock,P<:AbstractStaticKV,ID<:SnowflakeId
     control_adapter::Union{Nothing,ControlStreamAdapter}
     input_adapters::Vector{InputStreamAdapter}
     property_registry::Vector{PublicationConfig}
+    pollers::Vector{PollerConfig}
 end
 
 function BaseRtcAgent(comms::CommunicationResources, properties::AbstractStaticKV, clock::C=CachedEpochClock(EpochClock())) where {C<:Clocks.AbstractClock}
@@ -57,7 +59,8 @@ function BaseRtcAgent(comms::CommunicationResources, properties::AbstractStaticK
         nothing,
         nothing,
         InputStreamAdapter[],
-        PublicationConfig[]
+        PublicationConfig[],
+        PollerConfig[]
     )
 end
 
@@ -104,6 +107,9 @@ function Agent.on_start(agent::AbstractRtcAgent)
         throw(AgentCommunicationError("Failed to initialize communication resources: $(e)"))
     end
 
+    # Register built-in pollers
+    register_builtin_pollers!(agent)
+
     nothing
 end
 
@@ -118,8 +124,12 @@ function Agent.on_close(agent::AbstractRtcAgent)
     @info "Stopping agent $(Agent.name(agent))"
 
     b = base(agent)
+
     # Cancel all timers
     cancel!(b.timers)
+
+    # Clear all pollers
+    clear_pollers!(agent)
 
     # Close communication resources
     close(b.comms)
@@ -143,9 +153,9 @@ end
 """
     Agent.do_work(agent::AbstractRtcAgent)
 
-Perform one unit of work by polling communications, timers, and processing events.
+Perform one unit of work by polling all registered pollers in priority order.
 
-Updates the clock and polls input, property, timer, and control streams in order.
+Updates the clock and executes all pollers (built-in and custom) sorted by priority.
 Returns the total number of work items processed.
 """
 function Agent.do_work(agent::AbstractRtcAgent)
@@ -153,12 +163,40 @@ function Agent.do_work(agent::AbstractRtcAgent)
     fetch!(b.clock)
 
     work_count = 0
-    work_count += input_poller(agent)
-    work_count += property_poller(agent)
-    work_count += timer_poller(agent)
-    work_count += control_poller(agent)
+    pollers = b.pollers
+
+    # Type-stable iteration over pollers
+    @inbounds for i in 1:length(pollers)
+        work_count += pollers[i].poll_fn(agent)
+    end
 
     return work_count
+end
+
+# =============================================================================
+# Built-in Poller Registration
+# =============================================================================
+
+"""
+    register_builtin_pollers!(agent::AbstractRtcAgent)
+
+Register the framework's built-in pollers in priority order.
+
+This is called automatically during `on_start`. Users can override priorities
+by unregistering and re-registering with different priorities if needed.
+"""
+function register_builtin_pollers!(agent::AbstractRtcAgent)
+    # Input stream polling (highest priority)
+    register_poller!(input_poller, agent, PRIORITY_INPUT; name=:input_streams)
+
+    # Property publishing
+    register_poller!(property_poller, agent, PRIORITY_PROPERTY; name=:properties)
+
+    # Timer events
+    register_poller!(timer_poller, agent, PRIORITY_TIMER; name=:timers)
+
+    # Control stream polling (lowest priority of built-ins)
+    register_poller!(control_poller, agent, PRIORITY_CONTROL; name=:control_stream)
 end
 
 # =============================================================================
@@ -226,22 +264,4 @@ function property_poller(agent::AbstractRtcAgent)
     end
 
     return published_count
-end
-
-# =============================================================================
-# Utility Functions
-# =============================================================================
-
-"""
-    Base.empty!(agent::AbstractRtcAgent) -> Int
-
-Clear all registered publications.
-
-Returns the number of registrations removed.
-"""
-function Base.empty!(agent::AbstractRtcAgent)
-    b = base(agent)
-    count = length(b.property_registry)
-    empty!(b.property_registry)
-    return count
 end

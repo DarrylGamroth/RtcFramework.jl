@@ -41,6 +41,7 @@ include("test_communications.jl")
 include("test_property_store.jl")
 include("test_timers.jl")
 include("test_exceptions.jl")
+include("test_pollers.jl")
 include("test_integration.jl")
 
 # Run all test suites with organized structure
@@ -77,6 +78,10 @@ include("test_integration.jl")
 
                 @testset "Timer System Tests" begin
                     test_timers(client)
+                end
+
+                @testset "Poller System Tests" begin
+                    test_pollers(client)
                 end
 
                 @testset "Exception Handling Tests" begin
