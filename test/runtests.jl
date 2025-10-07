@@ -1,5 +1,5 @@
 using Test
-using TestService
+using RtcFramework
 using Aeron
 using Agent
 using Clocks
@@ -7,7 +7,11 @@ using SnowflakeId
 using StaticKV
 using WrappedUnions
 
-# Set up test environment variables before loading TestService
+# Load TestAgent module for tests
+include("TestAgent.jl")
+using .TestAgent
+
+# Set up test environment variables before loading TestAgent
 ENV["BLOCK_NAME"] = "TestAgent"
 ENV["BLOCK_ID"] = "1"
 ENV["STATUS_URI"] = "aeron:ipc"
@@ -40,7 +44,7 @@ include("test_exceptions.jl")
 include("test_integration.jl")
 
 # Run all test suites with organized structure
-@testset "TestService.jl Tests" begin
+@testset "RtcFramework.jl Tests" begin
     # Tests that don't need Aeron context
     @testset "Strategy System Tests" begin
         test_strategies()

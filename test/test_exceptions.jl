@@ -4,9 +4,10 @@ function test_exceptions(client)
     @testset "Error Message Quality" begin
         # Basic test that error handling works without exposing internal types
         clock = CachedEpochClock(EpochClock())
-        properties = TestService.PropertyStore.Properties(clock)
-        comms = TestService.CommunicationResources(client, properties)
-        agent = RtcAgent(comms, properties, clock)
+        properties = TestAgent.Properties(clock)
+        comms = CommunicationResources(client, properties)
+        base_agent = BaseRtcAgent(comms, properties, clock)
+        agent = TestAgent.RtcAgent(base_agent)
         
         # This should throw an informative error
         try

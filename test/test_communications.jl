@@ -5,41 +5,43 @@ Tests basic communication setup without requiring actual Aeron streams.
 function test_communications(client)
     @testset "Message Publishing" begin
         clock = CachedEpochClock(EpochClock())
-        properties = TestService.PropertyStore.Properties(clock)
-        comms = TestService.CommunicationResources(client, properties)
-        agent = RtcAgent(comms, properties, clock)
+        properties = TestAgent.Properties(clock)
+        comms = CommunicationResources(client, properties)
+        base_agent = BaseRtcAgent(comms, properties, clock)
+        agent = TestAgent.RtcAgent(base_agent)
         Agent.on_start(agent)  # Initialize adapters
         
         # Test that basic agent setup works
-        @test !isnothing(agent.properties)
-        @test agent.properties[:Name] isa String
+        @test !isnothing(base(agent).properties)
+        @test base(agent).properties[:Name] isa String
         
         # Test that we can access agent properties
-        @test haskey(agent.properties, :Name)
-        @test haskey(agent.properties, :NodeId) 
-        @test haskey(agent.properties, :HeartbeatPeriodNs)
+        @test haskey(base(agent).properties, :Name)
+        @test haskey(base(agent).properties, :NodeId) 
+        @test haskey(base(agent).properties, :HeartbeatPeriodNs)
         
         Agent.on_close(agent)
     end
     
     @testset "Communication Setup" begin
         clock = CachedEpochClock(EpochClock())
-        properties = TestService.PropertyStore.Properties(clock)
+        properties = TestAgent.Properties(clock)
 
         # Test communication resources creation
-        comms = TestService.CommunicationResources(client, properties)
+        comms = CommunicationResources(client, properties)
         @test !isnothing(comms)
-        @test comms isa TestService.CommunicationResources
+        @test comms isa CommunicationResources
         @test !isnothing(comms.status_stream)
         @test !isnothing(comms.control_stream)
         @test comms.input_streams isa Vector
         @test comms.output_streams isa Vector
         
         # Test agent construction with dependency injection
-        agent = RtcAgent(comms, properties, clock)
+        base_agent = BaseRtcAgent(comms, properties, clock)
+        agent = TestAgent.RtcAgent(base_agent)
         @test !isnothing(agent)
-        @test !isnothing(agent.properties)
-        @test agent.comms === comms
+        @test !isnothing(base(agent).properties)
+        @test base(agent).comms === comms
         
         # Test agent lifecycle
         @test_nowarn Agent.on_start(agent)

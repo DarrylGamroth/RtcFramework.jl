@@ -60,7 +60,7 @@ function run_agent()
             # Inject communication resources into the agent
             base = RtcFramework.BaseRtcAgent(comms, properties, clock)
 
-            agent = MyAgent(base)
+            agent = RtcAgent(base)
 
             # Start the agent
             runner = AgentRunner(BackoffIdleStrategy(), agent)

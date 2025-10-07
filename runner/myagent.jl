@@ -1,5 +1,5 @@
-@hsmdef mutable struct MyAgent{T<:RtcFramework.BaseRtcAgent} <: RtcFramework.AbstractRtcAgent
+@hsmdef mutable struct RtcAgent{T<:RtcFramework.BaseRtcAgent} <: RtcFramework.AbstractRtcAgent
     base::T
 end
 
-RtcFramework.base(agent::MyAgent) = agent.base
+RtcFramework.base(agent::RtcAgent) = agent.base

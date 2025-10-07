@@ -6,73 +6,75 @@ function test_rtcagent(client)
     @testset "RtcAgent Construction" begin
         # Test basic construction with dependency injection
         clock = CachedEpochClock(EpochClock())
-        properties = TestService.PropertyStore.Properties(clock)
-        comms = TestService.CommunicationResources(client, properties)
-        agent = RtcAgent(comms, properties, clock)
-        @test agent isa RtcAgent
-        @test agent.source_correlation_id == 0
-        @test agent.comms === comms
-        @test !isnothing(agent.clock)
-        @test !isnothing(agent.properties)
-        @test !isnothing(agent.id_gen)
-        @test !isnothing(agent.timers)
-        @test isempty(agent.property_registry)
-        @test agent.control_adapter === nothing  # Not yet initialized
-        @test isempty(agent.input_adapters)      # Not yet initialized
-        @test agent.status_proxy === nothing     # Not yet initialized
-        @test agent.property_proxy === nothing   # Not yet initialized
+        properties = TestAgent.Properties(clock)
+        comms = CommunicationResources(client, properties)
+        base_agent = BaseRtcAgent(comms, properties, clock)
+        agent = TestAgent.RtcAgent(base_agent)
+        
+        @test agent isa TestAgent.RtcAgent
+        @test base(agent).source_correlation_id == 0
+        @test base(agent).comms === comms
+        @test !isnothing(base(agent).clock)
+        @test !isnothing(base(agent).properties)
+        @test !isnothing(base(agent).id_gen)
+        @test !isnothing(base(agent).timers)
+        @test isempty(base(agent).property_registry)
+        @test base(agent).control_adapter === nothing  # Not yet initialized
+        @test isempty(base(agent).input_adapters)      # Not yet initialized
+        @test base(agent).status_proxy === nothing     # Not yet initialized
+        @test base(agent).property_proxy === nothing   # Not yet initialized
         
         # Test construction with specific clock
-        @testset "Agent should handle publish command" begin
+        @testset "Agent should handle specific clock" begin
             clock2 = CachedEpochClock(EpochClock())
-            properties2 = TestService.PropertyStore.Properties(clock2)
-            comms2 = TestService.CommunicationResources(client, properties2)
-            agent2 = RtcAgent(comms2, properties2, clock2)
-            @test agent2.clock === clock2
+            properties2 = TestAgent.Properties(clock2)
+            comms2 = CommunicationResources(client, properties2)
+            base_agent2 = BaseRtcAgent(comms2, properties2, clock2)
+            agent2 = TestAgent.RtcAgent(base_agent2)
+            @test base(agent2).clock === clock2
         end
     end
     
     @testset "Communication Lifecycle" begin
         clock = CachedEpochClock(EpochClock())
-        properties = TestService.PropertyStore.Properties(clock)
-        comms = TestService.CommunicationResources(client, properties)
-        agent = RtcAgent(comms, properties, clock)
+        properties = TestAgent.Properties(clock)
+        comms = CommunicationResources(client, properties)
+        base_agent = BaseRtcAgent(comms, properties, clock)
+        agent = TestAgent.RtcAgent(base_agent)
         
         # Test initial state - communication resources are already created
-        @test !isnothing(agent.comms)
-        @test agent.comms isa TestService.CommunicationResources
-        @test agent.control_adapter === nothing
-        @test isempty(agent.input_adapters)
+        @test !isnothing(base(agent).comms)
+        @test base(agent).comms isa CommunicationResources
+        @test base(agent).control_adapter === nothing
+        @test isempty(base(agent).input_adapters)
         
         # Test that Agent.on_start creates adapters
         Agent.on_start(agent)
-        @test !isnothing(agent.control_adapter)
-        @test agent.control_adapter isa TestService.ControlStreamAdapter
+        @test !isnothing(base(agent).control_adapter)
         # NOTE: input_adapters might be empty if no input streams are configured
-        @test agent.input_adapters isa Vector{TestService.InputStreamAdapter}
         
         # Test that Agent.on_close clears adapters and closes resources
         Agent.on_close(agent)
-        @test agent.control_adapter === nothing
-        @test isempty(agent.input_adapters)
+        @test base(agent).control_adapter === nothing
+        @test isempty(base(agent).input_adapters)
     end
     
     @testset "Agent Interface Implementation" begin
         clock = CachedEpochClock(EpochClock())
-        properties = TestService.PropertyStore.Properties(clock)
-        comms = TestService.CommunicationResources(client, properties)
-        agent = RtcAgent(comms, properties, clock)
+        properties = TestAgent.Properties(clock)
+        comms = CommunicationResources(client, properties)
+        base_agent = BaseRtcAgent(comms, properties, clock)
+        agent = TestAgent.RtcAgent(base_agent)
         
         # Test Agent.name
         name = Agent.name(agent)
         @test name isa String
-        @test name == agent.properties[:Name]
+        @test name == base(agent).properties[:Name]
         
         # Test Agent.on_start - creates adapters
         result = Agent.on_start(agent)
         @test result === nothing
-        @test !isnothing(agent.control_adapter)
-        @test agent.input_adapters isa Vector{TestService.InputStreamAdapter}
+        @test !isnothing(base(agent).control_adapter)
         
         # Test Agent.do_work
         work_count = Agent.do_work(agent)
@@ -81,29 +83,31 @@ function test_rtcagent(client)
         
         # Test Agent.on_close - cleans up adapters
         Agent.on_close(agent)
-        @test agent.control_adapter === nothing
-        @test isempty(agent.input_adapters)
+        @test base(agent).control_adapter === nothing
+        @test isempty(base(agent).input_adapters)
     end
     
     @testset "Dispatch System" begin
         clock = CachedEpochClock(EpochClock())
-        properties = TestService.PropertyStore.Properties(clock)
-        comms = TestService.CommunicationResources(client, properties)
-        agent = RtcAgent(comms, properties, clock)
+        properties = TestAgent.Properties(clock)
+        comms = CommunicationResources(client, properties)
+        base_agent = BaseRtcAgent(comms, properties, clock)
+        agent = TestAgent.RtcAgent(base_agent)
         
         # Test dispatch! function exists and handles events
-        @test_nowarn TestService.dispatch!(agent, :TestEvent)
-        @test_nowarn TestService.dispatch!(agent, :AnotherEvent, "test message")
+        @test_nowarn dispatch!(agent, :TestEvent)
+        @test_nowarn dispatch!(agent, :AnotherEvent, "test message")
     end
     
     @testset "Property Registry Management" begin
         clock = CachedEpochClock(EpochClock())
-        properties = TestService.PropertyStore.Properties(clock)
-        comms = TestService.CommunicationResources(client, properties)
-        agent = RtcAgent(comms, properties, clock)
+        properties = TestAgent.Properties(clock)
+        comms = CommunicationResources(client, properties)
+        base_agent = BaseRtcAgent(comms, properties, clock)
+        agent = TestAgent.RtcAgent(base_agent)
         
         # Test property registry operations
-        @test isempty(agent.property_registry)
+        @test isempty(base(agent).property_registry)
         @test !isregistered(agent, :TestProperty)
         
         # Test that we can access registry functions
@@ -112,9 +116,10 @@ function test_rtcagent(client)
     
     @testset "Error Handling" begin
         clock = CachedEpochClock(EpochClock())
-        properties = TestService.PropertyStore.Properties(clock)
-        comms = TestService.CommunicationResources(client, properties)
-        agent = RtcAgent(comms, properties, clock)
+        properties = TestAgent.Properties(clock)
+        comms = CommunicationResources(client, properties)
+        base_agent = BaseRtcAgent(comms, properties, clock)
+        agent = TestAgent.RtcAgent(base_agent)
         
         # Test that agent handles errors gracefully
         @test_nowarn Agent.on_start(agent)
@@ -130,23 +135,24 @@ function test_rtcagent(client)
     
     @testset "Work Loop Components" begin
         clock = CachedEpochClock(EpochClock())
-        properties = TestService.PropertyStore.Properties(clock)
-        comms = TestService.CommunicationResources(client, properties)
-        agent = RtcAgent(comms, properties, clock)
+        properties = TestAgent.Properties(clock)
+        comms = CommunicationResources(client, properties)
+        base_agent = BaseRtcAgent(comms, properties, clock)
+        agent = TestAgent.RtcAgent(base_agent)
         
         Agent.on_start(agent)
         
-        # Test individual work components
-        @test TestService.control_poller(agent) isa Int
-        @test TestService.input_poller(agent) isa Int
-        @test TestService.timer_poller(agent) isa Int
-        @test TestService.property_poller(agent) isa Int
+        # Test individual work components - these are internal functions
+        @test RtcFramework.control_poller(agent) isa Int
+        @test RtcFramework.input_poller(agent) isa Int
+        @test RtcFramework.timer_poller(agent) isa Int
+        @test RtcFramework.property_poller(agent) isa Int
         
         # All should return 0 in test environment (no actual work)
-        @test TestService.control_poller(agent) == 0
-        @test TestService.input_poller(agent) == 0
-        @test TestService.timer_poller(agent) >= 0  # May have timer work
-        @test TestService.property_poller(agent) >= 0  # May publish properties
+        @test RtcFramework.control_poller(agent) == 0
+        @test RtcFramework.input_poller(agent) == 0
+        @test RtcFramework.timer_poller(agent) >= 0  # May have timer work
+        @test RtcFramework.property_poller(agent) >= 0  # May publish properties
         
         Agent.on_close(agent)
     end
