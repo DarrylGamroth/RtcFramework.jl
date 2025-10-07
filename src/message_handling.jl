@@ -1,8 +1,8 @@
 """
-State machine utility functions for property handling and message processing.
+Message decoding and property handling utilities.
 
-Contains helper functions used across different agent states for property
-decoding, value assignment, and event handling operations.
+Provides functions for decoding SBE messages into Julia types, setting property
+values with appropriate copying semantics, and handling property read/write events.
 """
 
 """
@@ -91,10 +91,11 @@ Decodes the property value from the message, updates the property store,
 and publishes a status event confirming the change.
 """
 function on_property_write(sm::AbstractRtcAgent, event, message)
-    prop_type = keytype(sm.properties, event)
+    b = base(sm)
+    prop_type = keytype(b.properties, event)
     value = decode_property_value(message, prop_type)
 
-    set_property_value!(sm.properties, event, value, prop_type)
+    set_property_value!(b.properties, event, value, prop_type)
     publish_event_response(sm, event, value)
 end
 
@@ -106,8 +107,9 @@ Handle a property read request by publishing the current value.
 Checks if the property exists and publishes its current value as a status event.
 """
 function on_property_read(sm::AbstractRtcAgent, event, _)
-    if isset(sm.properties, event)
-        value = sm.properties[event]
+    b = base(sm)
+    if isset(b.properties, event)
+        value = b.properties[event]
         publish_event_response(sm, event, value)
     else
         publish_event_response(sm, event, nothing)

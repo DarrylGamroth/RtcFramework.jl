@@ -1,4 +1,5 @@
 include("strategies.jl")
+include("publication_helpers.jl")
 
 """
     PublicationConfig

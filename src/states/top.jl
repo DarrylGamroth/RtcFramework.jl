@@ -6,13 +6,13 @@
 @on_entry function (sm::AbstractRtcAgent, state::Top)
     @info "Entering state: $(state)"
 
-    schedule!(sm.timers, 0, :Heartbeat)
+    schedule!(base(sm).timers, 0, :Heartbeat)
 end
 
 @on_exit function (sm::AbstractRtcAgent, state::Top)
     @info "Exiting state: $(state)"
 
-    cancel!(sm.timers)
+    cancel!(base(sm).timers)
 end
 
 @on_initial function (sm::AbstractRtcAgent, ::Top)
@@ -23,8 +23,9 @@ end
     publish_event_response(sm, event, Hsm.current(sm))
 
     # Reschedule the next heartbeat
-    next_heartbeat_time = now + sm.properties[:HeartbeatPeriodNs]
-    schedule_at!(sm.timers, next_heartbeat_time, :Heartbeat)
+    b = base(sm)
+    next_heartbeat_time = now + b.properties[:HeartbeatPeriodNs]
+    schedule_at!(b.timers, next_heartbeat_time, :Heartbeat)
 
     return Hsm.EventHandled
 end
@@ -62,7 +63,7 @@ end
 end
 
 @on_event function (sm::AbstractRtcAgent, ::Top, ::Properties, message)
-    for name in keynames(sm.properties)
+    for name in keynames(base(sm).properties)
         on_property_read(sm, name, message)
     end
     return Hsm.EventHandled

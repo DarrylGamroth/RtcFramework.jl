@@ -37,7 +37,8 @@ function ControlStreamAdapter(subscription::Aeron.Subscription, agent::AbstractR
             while offset < length(buffer)
                 message = EventMessageDecoder(buffer, offset; position_ptr=position_ptr)
                 header = SpidersMessageCodecs.header(message)
-                agent.source_correlation_id = SpidersMessageCodecs.correlationId(header)
+                b = base(agent)
+                b.source_correlation_id = SpidersMessageCodecs.correlationId(header)
                 event = SpidersMessageCodecs.key(message, Symbol)
                 dispatch!(agent, event, message)
                 offset += sbe_encoded_length(MessageHeader) + sbe_decoded_length(message)
@@ -52,7 +53,8 @@ function ControlStreamAdapter(subscription::Aeron.Subscription, agent::AbstractR
             while offset < length(buffer)
                 message = EventMessageDecoder(buffer, offset; position_ptr=position_ptr)
                 header = SpidersMessageCodecs.header(message)
-                agent.source_correlation_id = SpidersMessageCodecs.correlationId(header)
+                b = base(agent)
+                b.source_correlation_id = SpidersMessageCodecs.correlationId(header)
                 dispatch!(agent, :LateMessage, message)
                 offset += sbe_encoded_length(MessageHeader) + sbe_decoded_length(message)
             end
@@ -60,15 +62,16 @@ function ControlStreamAdapter(subscription::Aeron.Subscription, agent::AbstractR
         end
 
         # Apply filtering if configured
-        filtered_handler = if isset(agent.properties, :ControlFilter)
-            SpidersTagFragmentFilter(fragment_handler, agent.properties[:ControlFilter])
+        b = base(agent)
+        filtered_handler = if isset(b.properties, :ControlFilter)
+            SpidersTagFragmentFilter(fragment_handler, b.properties[:ControlFilter])
         else
             fragment_handler
         end
 
         # Apply late fragment filtering if configured
         final_handler = SpidersLateFragmentFilter(filtered_handler, late_fragment_handler,
-            agent.properties[:LateMessageThresholdNs], agent.clock)
+            b.properties[:LateMessageThresholdNs], b.clock)
 
         assembler = Aeron.FragmentAssembler(final_handler)
 

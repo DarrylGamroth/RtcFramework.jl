@@ -5,7 +5,7 @@
 
 @on_event function (sm::AbstractRtcAgent, state::Root, event::Any, message::EventMessage)
     @info "Default handler called with event: $(event)"
-    if event in keynames(sm.properties)
+    if event in keynames(base(sm).properties)
         if SpidersMessageCodecs.format(message) == SpidersMessageCodecs.Format.NOTHING
             # If the message has no value, then it is a request for the current value
             on_property_read(sm, event, message)

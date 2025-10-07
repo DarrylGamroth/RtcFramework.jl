@@ -13,361 +13,51 @@ using StaticKV
 using WrappedUnions
 using UnsafeArrays
 
-include("PropertyStore/PropertyStore.jl")
-using .PropertyStore
-
 include("Timers/Timers.jl")
 using .Timers
-
-include("abstract_agent.jl")
-
-include("exceptions.jl")
-include("communications.jl")
-include("communication_resources.jl")
-
-include("adapters/adapters.jl")
-include("proxies/proxies.jl")
-
-include("states/states.jl")
-
-include("agent.jl")
-
-export RtcAgent,
-    # Publishing strategies for extension services
-    PublishStrategy, OnUpdate, Periodic, Scheduled, RateLimited,
-    # Property registration for extension services
-    register!, unregister!, isregistered, list,
-    # Timer scheduling for extension services
-    PolledTimer, schedule!, schedule_at!, cancel!,
-    PropertyStore
 
 const DEFAULT_INPUT_FRAGMENT_COUNT_LIMIT = 10
 const DEFAULT_CONTROL_FRAGMENT_COUNT_LIMIT = 1
 
-# =============================================================================
-# Agent Convenience Functions for Proxy Operations
-# =============================================================================
-
-"""
-    publish_status_event(agent, event, data)
-
-Publish a status event using the agent's status proxy.
-
-Convenience method that automatically handles timestamp generation and agent name.
-Throws `AgentStateError` if the status proxy is not initialized.
-"""
-function publish_status_event(agent::AbstractRtcAgent, event::Symbol, data)
-    timestamp = time_nanos(agent.clock)
-    proxy = agent.status_proxy::StatusProxy
-
-    return publish_status_event(
-        proxy, event, data, agent.properties[:Name], agent.source_correlation_id, timestamp
-    )
-end
-
-"""
-    publish_state_change(agent, new_state)
-
-Publish a state change event using the agent's status proxy.
-
-Convenience method for reporting agent state transitions.
-"""
-function publish_state_change(agent::AbstractRtcAgent, new_state::Symbol)
-    timestamp = time_nanos(agent.clock)
-    proxy = agent.status_proxy::StatusProxy
-
-    return publish_state_change(
-        proxy, new_state, agent.properties[:Name], agent.source_correlation_id, timestamp
-    )
-end
-
-"""
-Publish an event response using the agent's status proxy (convenience method).
-"""
-function publish_event_response(agent::AbstractRtcAgent, event::Symbol, value)
-    timestamp = time_nanos(agent.clock)
-    proxy = agent.status_proxy::StatusProxy
-
-    return publish_event_response(
-        proxy, event, value, agent.properties[:Name], agent.source_correlation_id, timestamp
-    )
-end
-
-"""
-Publish a property value to a specific output stream using the agent's property proxy (convenience method).
-"""
-function publish_property(agent::AbstractRtcAgent, stream_index::Int, field::Symbol, value)
-    # Validate field exists in properties
-    if !haskey(agent.properties, field)
-        throw(KeyError("Property $field not found in agent"))
-    end
-
-    timestamp = time_nanos(agent.clock)
-    proxy = agent.property_proxy::PropertyProxy
-
-    return publish_property(proxy, stream_index, field, value,
-        agent.properties[:Name], agent.source_correlation_id, timestamp)
-end
-
-"""
-Publish a single property update with strategy evaluation using the agent's property proxy (convenience method).
-"""
-function publish_property_update(agent::AbstractRtcAgent, config::PublicationConfig)
-    timestamp = time_nanos(agent.clock)
-    correlation_id = next_id(agent.id_gen)
-    proxy = agent.property_proxy::PropertyProxy
-
-    # Delegate to proxy with business logic parameters
-    return publish_property_update(proxy, config, agent.properties,
-        agent.properties[:Name], correlation_id, timestamp)
-end
-
-"""
-    dispatch!(agent::AbstractRtcAgent, event::Symbol, message=nothing)
-
-Dispatch an event through the state machine and update state if changed.
-"""
-function dispatch!(agent::AbstractRtcAgent, event::Symbol, message=nothing)
-    try
-        prev = Hsm.current(agent)
-        Hsm.dispatch!(agent, event, message)
-        current = Hsm.current(agent)
-
-        if prev != current
-            publish_state_change(agent, current)
-        end
-
-    catch e
-        if e isa Agent.AgentTerminationException
-            @info "Agent termination requested"
-            throw(e)
-        else
-            Hsm.dispatch!(agent, :Error, (event, e::Exception))
-        end
-    end
-end
-
-"""
-    input_poller(agent::AbstractRtcAgent) -> Int
-
-Poll all input streams for incoming data messages using input stream adapters.
-Returns the number of fragments processed.
-"""
-function input_poller(agent::AbstractRtcAgent)
-    poll(agent.input_adapters, DEFAULT_INPUT_FRAGMENT_COUNT_LIMIT)
-end
-
-"""
-    control_poller(agent::AbstractRtcAgent) -> Int
-
-Poll the control stream for incoming control messages using the control stream adapter.
-Returns the number of fragments processed.
-"""
-function control_poller(agent::AbstractRtcAgent)
-    adapter = agent.control_adapter::ControlStreamAdapter
-    poll(adapter, DEFAULT_CONTROL_FRAGMENT_COUNT_LIMIT)
-end
-
-function timer_poller(agent::AbstractRtcAgent)
-    Timers.poll(agent.timers, agent) do event, now, agent
-        agent.source_correlation_id = next_id(agent.id_gen)
-        dispatch!(agent, event, now)
-    end
-end
-
-"""
-    should_poll_properties(agent::AbstractRtcAgent) -> Bool
-
-Determine whether property polling should be active based on agent state.
-"""
-function should_poll_properties(agent::AbstractRtcAgent)
-    return Hsm.current(agent) === :Playing
-end
-
-"""
-    property_poller(agent::AbstractRtcAgent) -> Int
-
-    Poll all registered properties for updates.
-"""
-function property_poller(agent::AbstractRtcAgent)
-    if !should_poll_properties(agent) || isempty(agent.property_registry)
-        return 0
-    end
-
-    published_count = 0
-    registry = agent.property_registry
-
-    @inbounds for i in 1:length(registry)
-        published_count += publish_property_update(agent, registry[i])
-    end
-
-    return published_count
-end
-"""
-    register!(agent::AbstractRtcAgent, field::Symbol, stream_index::Int, strategy::PublishStrategy)
-
-Register a property for publication using a publication stream by index.
-The stream_index corresponds to the publication stream (1-based).
-A property can be registered multiple times with different streams and strategies.
-"""
-function register!(agent::AbstractRtcAgent,
-    field::Symbol,
-    stream_index::Int,
-    strategy::PublishStrategy)
-
-    # Validate stream index and get publication
-    output_streams = agent.comms.output_streams
-    if stream_index < 1 || stream_index > length(output_streams)
-        throw(StreamNotFoundError("PubData$stream_index", stream_index))
-    end
-
-    # Create and add the configuration to the registry
-    config = PublicationConfig(
-        -1,
-        next_time(strategy, 0),
-        field,
-        stream_index,
-        strategy,
-        output_streams[stream_index]
-    )
-    push!(agent.property_registry, config)
-
-    @info "Registered property: $field on stream $stream_index with strategy $strategy"
-end
-
-"""
-    unregister!(agent::AbstractRtcAgent, field::Symbol, stream_index::Int) -> Int
-
-Remove a specific property-stream registration from the publication registry.
-Returns the number of registrations removed (0 or 1).
-"""
-function unregister!(agent::AbstractRtcAgent, field::Symbol, stream_index::Int)
-    if !isregistered(agent, field, stream_index)
-        return 0
-    end
-
-    indices = findall(config -> config.field == field && config.stream_index == stream_index, agent.property_registry)
-    deleteat!(agent.property_registry, indices)
-
-    @info "Unregistered property: $field on stream $stream_index"
-
-    return length(indices)
-end
-
-"""
-    unregister!(agent::AbstractRtcAgent, field::Symbol) -> Int
-
-Remove all registrations for a property field from the publication registry.
-Returns the number of registrations removed.
-"""
-function unregister!(agent::AbstractRtcAgent, field::Symbol)
-    if !isregistered(agent, field)
-        return 0
-    end
-
-    indices = findall(config -> config.field == field, agent.property_registry)
-    deleteat!(agent.property_registry, indices)
-
-    @info "Unregistered property: $field"
-
-    return length(indices)
-end
-
-"""
-    isregistered(agent::AbstractRtcAgent, field::Symbol) -> Bool
-    isregistered(agent::AbstractRtcAgent, field::Symbol, stream_index::Int) -> Bool
-
-Check if a property is registered for publication.
-With only field specified, returns true if the field is registered on any stream.
-With both field and stream_index specified, returns true if the field is registered on that specific stream.
-"""
-isregistered(agent::AbstractRtcAgent, field::Symbol) = any(config -> config.field == field, agent.property_registry)
-isregistered(agent::AbstractRtcAgent, field::Symbol, stream_index::Int) = any(config -> config.field == field && config.stream_index == stream_index, agent.property_registry)
-
-"""
-    empty!(agent::AbstractRtcAgent) -> Int
-
-Clear all registered publications. Returns the number of registrations removed.
-"""
-function Base.empty!(agent::AbstractRtcAgent)
-    count = length(agent.property_registry)
-    empty!(agent.property_registry)
-    return count
-end
-
-"""
-Get the name of this agent.
-"""
-Agent.name(agent::AbstractRtcAgent) = agent.properties[:Name]
-
-"""
-Initialize the agent by setting up communications and starting the state machine.
-"""
-function Agent.on_start(agent::AbstractRtcAgent)
-    @info "Starting agent $(Agent.name(agent))"
-
-    try
-        # Create control stream adapter
-        agent.control_adapter = ControlStreamAdapter(
-            agent.comms.control_stream,
-            agent
-        )
-
-        # Create input stream adapters
-        empty!(agent.input_adapters)
-        for input_stream in agent.comms.input_streams
-            push!(agent.input_adapters, InputStreamAdapter(input_stream, agent))
-        end
-
-        # Create proxy instances
-        agent.status_proxy = StatusProxy(agent.comms.status_stream)
-        agent.property_proxy = PropertyProxy(agent.comms.output_streams)
-
-    catch e
-        throw(AgentCommunicationError("Failed to initialize communication resources: $(e)"))
-    end
-
-    nothing
-end
-
-"""
-Shutdown the agent by tearing down communications and stopping timers.
-"""
-function Agent.on_close(agent::AbstractRtcAgent)
-    @info "Stopping agent $(Agent.name(agent))"
-
-    # Cancel all timers
-    cancel!(agent.timers)
-
-    # Close communication resources
-    close(agent.comms)
-
-    # Clear adapters and proxies
-    agent.control_adapter = nothing
-    agent.status_proxy = nothing
-    agent.property_proxy = nothing
-    empty!(agent.input_adapters)
-end
-
-function Agent.on_error(agent::AbstractRtcAgent, error)
-    @error "Error in agent $(Agent.name(agent)):" exception = (error, catch_backtrace())
-end
-
-"""
-Perform one unit of work by polling communications, timers, and processing events.
-"""
-function Agent.do_work(agent::AbstractRtcAgent)
-    fetch!(agent.clock)
-
-    work_count = 0
-    work_count += input_poller(agent)
-    work_count += property_poller(agent)
-    work_count += timer_poller(agent)
-    work_count += control_poller(agent)
-
-    return work_count
-end
-
-include("property_handlers.jl")
+include("exceptions.jl")
+include("property_utilities.jl")
+include("abstract_agent.jl")
+include("communication_resources.jl")
+include("adapters/adapters.jl")
+include("proxies/proxies.jl")
+include("states/states.jl")
+include("agent.jl")
+include("publishing.jl")
+include("property_registration.jl")
+include("dispatch.jl")
+include("message_handling.jl")
+include("precompile.jl")
+
+# Exports
+
+# Property system
+export @base_properties
+export PropertyError, PropertyNotFoundError, EnvironmentVariableError
+
+# Core types
+export AbstractRtcAgent, BaseRtcAgent, base
+
+# Communication infrastructure
+export CommunicationResources
+export PublicationConfig
+export PublishStrategy, OnUpdate, Periodic, Scheduled, RateLimited
+
+# Timer infrastructure
+export PolledTimer, schedule!, schedule_at!, cancel!
+
+# Property registration
+export register!, unregister!, isregistered
+
+# High-level convenience methods
+export publish_status_event, publish_state_change, publish_event_response
+export publish_property, dispatch!
+
+# Re-export from StaticKV for service convenience
+export @kvstore, AbstractStaticKV
 
 end # module RtcFramework

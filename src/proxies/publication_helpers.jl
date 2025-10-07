@@ -1,4 +1,11 @@
 """
+Aeron publication utility functions for proxy implementations.
+
+Provides retry logic and error handling for Aeron publication operations.
+These functions are used internally by StatusProxy and PropertyProxy.
+"""
+
+"""
     try_claim(publication, length, max_attempts=10)
 
 Try to claim a buffer from the stream with retries.

@@ -23,8 +23,6 @@ ENV["SUB_DATA_URI_1"] = "aeron:udp?endpoint=0.0.0.0:40123"
 ENV["SUB_DATA_STREAM_1"] = "4"
 ENV["LOG_LEVEL"] = "Debug"
 
-import RtcFramework: PropertyStore.generate_sub_data_uri_keys, PropertyStore.generate_pub_data_uri_keys
-
 include("myagent.jl")
 include("kvstore.jl")
 
@@ -83,15 +81,5 @@ function run_agent()
         end
     end
 end
-
-ctx = Aeron.Context()
-client = Aeron.Client(ctx)
-clock = CachedEpochClock(EpochClock())
-properties = Properties(clock)
-
-# Create communication resources
-comms = RtcFramework.CommunicationResources(client, properties)
-base = RtcFramework.BaseRtcAgent(comms, properties, clock)
-agent = MyAgent(base)
 
 end # module TestService
