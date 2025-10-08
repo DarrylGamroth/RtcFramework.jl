@@ -200,6 +200,95 @@ clear_pollers!(agent)                           # Remove all pollers (including 
 - Pollers with same priority execute in registration order (FIFO)
 - Custom pollers can be registered at any priority between built-ins
 
+### Hierarchical State Machine
+
+The framework uses a hierarchical state machine (HSM) to manage agent lifecycle and behavior. Understanding the state structure is essential for implementing custom event handlers.
+
+#### State Hierarchy
+
+```
+Root
+└── Top
+    └── Ready (container for operational states)
+        ├── Stopped (initial substate of Ready)
+        └── Processing (superstate for active operation)
+            ├── Playing (active processing)
+            └── Paused (suspended processing)
+    ├── Error (error handling)
+    └── Exit (final state)
+```
+
+#### State Descriptions
+
+- **Root**: Top-level state, always active
+- **Top**: Container for all operational states
+- **Ready**: Container state for normal operations, entered after agent creation
+  - **Stopped**: Initial substate, agent initialized but not processing
+  - **Processing**: Superstate for all active processing states
+    - **Playing**: Normal active operation, processing work
+    - **Paused**: Processing suspended but state maintained
+- **Error**: Error state for handling exceptional conditions
+- **Exit**: Terminal state before shutdown
+
+#### State Transitions
+
+Common state transition flows:
+
+```julia
+# Agent initialization
+# Ready entered → automatically transitions to Stopped (initial substate)
+
+# Normal startup
+Stopped → Playing
+
+# Pause/resume
+Playing → Paused → Playing
+
+# Stop/restart (returns to Stopped within Ready)
+Playing → Stopped → Playing
+
+# Error handling
+Playing → Error → Stopped  # or → Playing (if recoverable)
+
+# Shutdown
+Playing → Exit
+```
+
+#### Implementing Event Handlers
+
+Use `@on_event` to handle events in specific states:
+
+```julia
+using Hsm
+
+# Handle event only in Playing state
+@on_event function (agent::MyAgent, ::Playing, ::MyCustomEvent, data)
+    # Process event
+    @info "Processing custom event" data
+    return Hsm.EventHandled
+end
+
+# Handle event in Processing superstate (Playing or Paused)
+@on_event function (agent::MyAgent, ::Processing, ::DataUpdate, data)
+    # Update internal state
+    properties(agent)[:LastUpdate] = data.timestamp
+    return Hsm.EventHandled
+end
+
+# Handle event in any state (use Top)
+@on_event function (agent::MyAgent, ::Top, ::EmergencyStop, _)
+    @warn "Emergency stop requested"
+    return transition!(agent, Stopped)
+end
+```
+
+**Important Notes:**
+- Event handlers in child states take precedence over parent states
+- Return `Hsm.EventHandled` if event is processed, `Hsm.EventIgnored` to bubble up to parent
+- Use `transition!(agent, NewState)` to trigger state changes
+- State transitions trigger `on_exit` for old state and `on_entry` for new state
+- See [Hsm.jl documentation](https://github.com/erwanlem/Hsm.jl) for more details on state machine patterns
+
 ### Event Dispatch
 
 Handle custom events by implementing `@on_event` handlers for your agent:
