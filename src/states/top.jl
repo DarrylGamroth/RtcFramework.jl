@@ -4,14 +4,10 @@
 @statedef AbstractRtcAgent :Top
 
 @on_entry function (sm::AbstractRtcAgent, state::Top)
-    @info "Entering state: $(state)"
-
     schedule!(base(sm).timers, 0, :Heartbeat)
 end
 
 @on_exit function (sm::AbstractRtcAgent, state::Top)
-    @info "Exiting state: $(state)"
-
     cancel!(base(sm).timers)
 end
 

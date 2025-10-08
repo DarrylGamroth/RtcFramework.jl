@@ -20,15 +20,6 @@
     return Hsm.EventNotHandled
 end
 
-# These are useful for debugging but prevent the module from precompilation
-# @on_entry function (sm::AbstractRtcAgent, state::Any)
-#     @info "Entering state: $(state)"
-# end
-
-# @on_exit function (sm::AbstractRtcAgent, state::Any)
-#     @info "Exiting state: $(state)"
-# end
-
 @on_initial function (sm::AbstractRtcAgent, ::Root)
     Hsm.transition!(sm, :Top)
 end
