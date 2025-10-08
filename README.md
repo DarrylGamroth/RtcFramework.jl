@@ -147,13 +147,13 @@ publish_event_response(agent, :CommandAck, true)
 
 ```julia
 # Schedule a timer (relative delay)
-schedule!(base(agent).timers, 1_000_000_000, :OneSecondTimer)  # 1 second from now
+schedule!(timers(agent), 1_000_000_000, :OneSecondTimer)  # 1 second from now
 
 # Schedule at absolute time
-schedule_at!(base(agent).timers, specific_timestamp_ns, :AbsoluteTimer)
+schedule_at!(timers(agent), specific_timestamp_ns, :AbsoluteTimer)
 
 # Cancel a timer
-cancel!(base(agent).timers, :OneSecondTimer)
+cancel!(timers(agent), :OneSecondTimer)
 ```
 
 ### Custom Pollers

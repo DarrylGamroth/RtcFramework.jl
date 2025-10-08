@@ -42,6 +42,7 @@ include("test_property_store.jl")
 include("test_timers.jl")
 include("test_exceptions.jl")
 include("test_pollers.jl")
+include("test_accessors.jl")
 include("test_integration.jl")
 
 # Run all test suites with organized structure
@@ -82,6 +83,10 @@ include("test_integration.jl")
 
                 @testset "Poller System Tests" begin
                     test_pollers(client)
+                end
+
+                @testset "Accessor Function Tests" begin
+                    test_accessors(client)
                 end
 
                 @testset "Exception Handling Tests" begin

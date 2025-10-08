@@ -47,6 +47,7 @@ export PollerFunction, PollerConfig
 
 # Core types
 export AbstractRtcAgent, BaseRtcAgent, base
+export properties, timers
 
 # Communication infrastructure
 export CommunicationResources

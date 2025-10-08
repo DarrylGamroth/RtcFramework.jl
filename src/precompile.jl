@@ -328,6 +328,10 @@ function _precompile_rtcframework()
     precompile(Tuple{typeof(base),AbstractRtcAgent})
     precompile(Tuple{typeof(base),BaseAgentType})
 
+    # Convenience accessors for service code
+    precompile(Tuple{typeof(properties),AbstractRtcAgent})
+    precompile(Tuple{typeof(timers),AbstractRtcAgent})
+
     nothing
 end
 
