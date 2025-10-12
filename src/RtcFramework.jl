@@ -67,4 +67,7 @@ export publish_property, dispatch!
 # Re-export from StaticKV for service convenience
 export @kvstore, AbstractStaticKV
 
+# Hsm
+export dispatch!
+
 end # module RtcFramework
