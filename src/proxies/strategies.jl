@@ -108,9 +108,9 @@ end
     ::Int64,
     property_timestamp_ns::Int64,
     current_time_ns::Int64)
-    # Publish if the property was updated in the current loop (timestamp matches current time)
-    # AND we haven't already published this update (last_published_ns != property_timestamp_ns)
-    return property_timestamp_ns == current_time_ns && last_published_ns != property_timestamp_ns
+    # Publish if the property was updated since the last publication
+    # This allows OnUpdate to work when properties are modified between polling cycles
+    return property_timestamp_ns > last_published_ns
 end
 
 @inline function should_publish(strategy::PeriodicStrategy,
@@ -144,8 +144,8 @@ end
     ::Int64,
     property_timestamp_ns::Int64,
     current_time_ns::Int64)
-    # Only consider publishing if the property was updated in this loop
-    if property_timestamp_ns != current_time_ns
+    # Only publish if the property was updated since the last publication
+    if property_timestamp_ns <= last_published_ns
         return false
     end
 
@@ -153,6 +153,7 @@ end
         return true  # First publication
     end
 
+    # Property was updated, check if enough time elapsed since last publish
     return (current_time_ns - last_published_ns) >= strategy.min_interval_ns
 end
 
