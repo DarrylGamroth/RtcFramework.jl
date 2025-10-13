@@ -246,22 +246,35 @@ end
 """
     property_poller(agent::AbstractRtcAgent) -> Int
 
-Poll all registered properties for updates.
+Poll all registered properties and dispatch publish events when strategies indicate.
 
-Only polls when in :Playing state. Returns the number of properties published.
+Checks publication strategies for each registered property. When a property should
+be published, dispatches a :PublishProperty event with the config, updates timing
+state, and counts the dispatch. Returns the number of properties that should publish.
 """
 function property_poller(agent::AbstractRtcAgent)
     b = base(agent)
-    if !should_poll_properties(agent) || isempty(b.property_registry)
+    registry = b.property_registry
+
+    if isempty(registry)
         return 0
     end
 
-    published_count = 0
-    registry = b.property_registry
+    now = time_nanos(b.clock)
+    count = 0
 
     @inbounds for i in 1:length(registry)
-        published_count += publish_property_update(agent, registry[i])
+        config = registry[i]
+        property_timestamp_ns = last_update(b.properties, config.field)
+        
+        if should_publish(config.strategy, config.last_published_ns,
+                         config.next_scheduled_ns, property_timestamp_ns, now)
+            dispatch!(agent, :PublishProperty, config)
+            config.last_published_ns = now
+            config.next_scheduled_ns = next_time(config.strategy, now)
+            count += 1
+        end
     end
 
-    return published_count
+    return count
 end

@@ -38,8 +38,7 @@ function _precompile_rtcframework()
     # Hot Path Functions - Property Publishing
     # =============================================================================
 
-    # publish_property_update is a critical hot path
-    precompile(Tuple{typeof(publish_property_update),AbstractRtcAgent,PublicationConfig})
+    precompile(Tuple{typeof(publish_property),AbstractRtcAgent,PublicationConfig})
     precompile(Tuple{typeof(property_poller),AbstractRtcAgent})
 
     # Strategy functions - called in every publication evaluation
@@ -84,8 +83,10 @@ function _precompile_rtcframework()
 
     # StatusProxy publishing - array types
     precompile(Tuple{typeof(publish_status_event),StatusProxy,Symbol,Vector{Float32},String,Int64,Int64})
+    precompile(Tuple{typeof(publish_status_event),StatusProxy,Symbol,Vector{Float64},String,Int64,Int64})
     precompile(Tuple{typeof(publish_status_event),StatusProxy,Symbol,Vector{Int64},String,Int64,Int64})
-    precompile(Tuple{typeof(publish_status_event),StatusProxy,Symbol,Array{Float32,3},String,Int64,Int64})
+    precompile(Tuple{typeof(publish_status_event),StatusProxy,Symbol,Matrix{Float32},String,Int64,Int64})
+    precompile(Tuple{typeof(publish_status_event),StatusProxy,Symbol,Matrix{Float64},String,Int64,Int64})
 
     # StatusProxy convenience functions
     precompile(Tuple{typeof(publish_state_change),StatusProxy,Symbol,String,Int64,Int64})
@@ -105,8 +106,10 @@ function _precompile_rtcframework()
 
     # PropertyProxy publishing - array types
     precompile(Tuple{typeof(publish_property),PropertyProxy,Int,Symbol,Vector{Float32},String,Int64,Int64})
+    precompile(Tuple{typeof(publish_property),PropertyProxy,Int,Symbol,Vector{Float64},String,Int64,Int64})
     precompile(Tuple{typeof(publish_property),PropertyProxy,Int,Symbol,Vector{Int64},String,Int64,Int64})
-    precompile(Tuple{typeof(publish_property),PropertyProxy,Int,Symbol,Array{Float32,3},String,Int64,Int64})
+    precompile(Tuple{typeof(publish_property),PropertyProxy,Int,Symbol,Matrix{Float32},String,Int64,Int64})
+    precompile(Tuple{typeof(publish_property),PropertyProxy,Int,Symbol,Matrix{Float64},String,Int64,Int64})
 
     # PropertyProxy with strategy evaluation
     precompile(Tuple{typeof(publish_property_update),PropertyProxy,PublicationConfig,PropertiesType,String,Int64,Int64})
@@ -144,7 +147,9 @@ function _precompile_rtcframework()
     precompile(Tuple{typeof(decode_property_value),EventMessageDecoder,Type{Bool}})
     precompile(Tuple{typeof(decode_property_value),EventMessageDecoder,Type{Symbol}})
     precompile(Tuple{typeof(decode_property_value),EventMessageDecoder,Type{Vector{Float32}}})
-    precompile(Tuple{typeof(decode_property_value),EventMessageDecoder,Type{Array{Float32,3}}})
+    precompile(Tuple{typeof(decode_property_value),EventMessageDecoder,Type{Vector{Float64}}})
+    precompile(Tuple{typeof(decode_property_value),EventMessageDecoder,Type{Matrix{Float32}}})
+    precompile(Tuple{typeof(decode_property_value),EventMessageDecoder,Type{Matrix{Float64}}})
 
     # Set property values
     precompile(Tuple{typeof(set_property_value!),PropertiesType,Symbol,String,Type{String}})
@@ -152,7 +157,9 @@ function _precompile_rtcframework()
     precompile(Tuple{typeof(set_property_value!),PropertiesType,Symbol,Float64,Type{Float64}})
     precompile(Tuple{typeof(set_property_value!),PropertiesType,Symbol,Bool,Type{Bool}})
     precompile(Tuple{typeof(set_property_value!),PropertiesType,Symbol,Vector{Float32},Type{Vector{Float32}}})
-    precompile(Tuple{typeof(set_property_value!),PropertiesType,Symbol,Array{Float32,3},Type{Array{Float32,3}}})
+    precompile(Tuple{typeof(set_property_value!),PropertiesType,Symbol,Vector{Float64},Type{Vector{Float64}}})
+    precompile(Tuple{typeof(set_property_value!),PropertiesType,Symbol,Matrix{Float32},Type{Matrix{Float32}}})
+    precompile(Tuple{typeof(set_property_value!),PropertiesType,Symbol,Matrix{Float64},Type{Matrix{Float64}}})
 
     # Property handlers
     precompile(Tuple{typeof(on_property_write),AbstractRtcAgent,Symbol,EventMessageDecoder})
@@ -169,7 +176,7 @@ function _precompile_rtcframework()
     precompile(Tuple{typeof(dispatch!),AbstractRtcAgent,Symbol,Int64})
     precompile(Tuple{typeof(dispatch!),AbstractRtcAgent,Symbol,String})
     precompile(Tuple{typeof(dispatch!),AbstractRtcAgent,Symbol,Exception})
-
+    precompile(Tuple{typeof(dispatch!),AbstractRtcAgent,Symbol,PublicationConfig})
     # =============================================================================
     # Agent Framework Interface
     # =============================================================================
@@ -228,7 +235,7 @@ function _precompile_rtcframework()
     precompile(Tuple{typeof(control_poller),AbstractRtcAgent})
     precompile(Tuple{typeof(timer_poller),AbstractRtcAgent})
     precompile(Tuple{typeof(property_poller),AbstractRtcAgent})
-    
+
     # Built-in poller registration
     precompile(Tuple{typeof(register_builtin_pollers!),AbstractRtcAgent})
 

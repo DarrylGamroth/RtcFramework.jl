@@ -115,14 +115,3 @@ function Base.empty!(agent::AbstractRtcAgent)
     empty!(b.property_registry)
     return count
 end
-
-"""
-    should_poll_properties(agent::AbstractRtcAgent) -> Bool
-
-Determine whether property polling should be active based on agent state.
-
-Property polling is only active when the agent is in the :Playing state.
-"""
-function should_poll_properties(agent::AbstractRtcAgent)
-    return Hsm.current(agent) === :Playing
-end

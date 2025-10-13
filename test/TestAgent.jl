@@ -7,15 +7,15 @@ using RtcFramework
 using StaticKV
 using Clocks
 using Hsm
-using Logging  # Needed for @base_properties macro expansion
+using Logging
 
 # Define test properties using the framework's macro
 @kvstore Properties begin
     @base_properties
 
     # Additional test properties
-    TestMatrix::Array{Float32,3} => (
-        rand(Float32, 10, 5, 2)
+    TestMatrix::Matrix{Float32} => (
+        rand(Float32, 10, 5)
     )
     TestValue::Int64 => 42
     TestString::String => "test"

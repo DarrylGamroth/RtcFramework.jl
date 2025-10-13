@@ -80,20 +80,18 @@ function publish_property(agent::AbstractRtcAgent, stream_index::Int, field::Sym
 end
 
 """
-    publish_property_update(agent::AbstractRtcAgent, config::PublicationConfig)
+    publish_property(agent::AbstractRtcAgent, config::PublicationConfig)
 
-Publish a single property update with strategy evaluation using the agent's property proxy.
+Publish a property value using publication configuration.
 
-Convenience method that handles timestamp generation, correlation ID creation,
-and delegates to the proxy for publication.
+Convenience method that extracts stream index, field, and value from the config
+and agent properties, then publishes to the appropriate stream.
 """
-function publish_property_update(agent::AbstractRtcAgent, config::PublicationConfig)
+function publish_property(agent::AbstractRtcAgent, config::PublicationConfig)
     b = base(agent)
     timestamp = time_nanos(b.clock)
-    correlation_id = next_id(b.id_gen)
     proxy = b.property_proxy::PropertyProxy
 
-    # Delegate to proxy with business logic parameters
-    return publish_property_update(proxy, config, b.properties,
-        b.properties[:Name], correlation_id, timestamp)
+    return publish_property(proxy, config.stream_index, config.field, 
+        b.properties[config.field], b.properties[:Name], b.source_correlation_id, timestamp)
 end

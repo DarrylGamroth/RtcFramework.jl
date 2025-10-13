@@ -114,21 +114,77 @@ All examples below assume you have an agent instance created as shown in the Qui
 
 ### Property Publishing
 
-Register properties with publication strategies:
+The framework uses an **event-based property publishing architecture** that separates timing logic (when to publish) from publishing mechanism (how to publish). This enables powerful customization while keeping strategy logic centralized.
+
+#### Basic Usage
+
+Register properties with publication strategies during agent initialization:
 
 ```julia
-# Publish on every update
-register!(agent, :SensorData, 1, OnUpdate())
+# In your agent's @on_entry handler for :Processing state
+@on_entry function (agent::MyAgent, ::Processing)
+    # Publish on every property update
+    register!(agent, :SensorData, 1, OnUpdate())
 
-# Publish every 100ms
-register!(agent, :TargetPosition, 1, Periodic(100_000_000))
+    # Publish every 100ms
+    register!(agent, :TargetPosition, 1, Periodic(100_000_000))
 
-# Publish at most once per 50ms (rate limiting)
-register!(agent, :EnableFlag, 1, RateLimited(50_000_000))
+    # Publish at most once per 50ms (rate limiting)
+    register!(agent, :EnableFlag, 1, RateLimited(50_000_000))
 
-# Publish at specific time
-register!(agent, :Timestamp, 1, Scheduled(time_nanos(base(agent).clock) + 1_000_000_000))
+    # Publish at specific time
+    register!(agent, :Timestamp, 1, Scheduled(time_nanos(base(agent).clock) + 1_000_000_000))
+end
 ```
+
+**Publication Strategies:**
+
+- **`OnUpdate()`**: Publishes whenever the property value changes
+- **`Periodic(interval_ns)`**: Publishes at regular intervals (e.g., every 100ms)
+- **`RateLimited(min_interval_ns)`**: Publishes on updates but enforces minimum interval
+- **`Scheduled(time_ns)`**: Publishes once at a specific time
+
+#### How It Works
+
+Properties are published automatically when the agent is in `:Playing` state:
+
+1. **Property Poller** (runs every cycle):
+   - Evaluates strategies for each registered property
+   - Dispatches `:PublishProperty` events when strategies approve
+   - Updates timing state (last published, next scheduled)
+
+2. **Event Handler** (in `:Playing` state):
+   - Receives `:PublishProperty` events
+   - Publishes property value to Aeron stream
+   - Can be overridden for custom publishing
+
+#### Custom Publishing
+
+For advanced cases like publishing composite data (e.g., camera frames with metadata), override the event handler:
+
+```julia
+# Custom publishing handler in your agent
+@on_event function (agent::CameraAgent, ::Playing, ::PublishProperty, config::PublicationConfig)
+    if config.field == :FrameData
+        # Custom: publish frame with metadata
+        b = base(agent)
+        frame = b.properties[:FrameData]
+        offset_x = b.properties[:OffsetX]
+        offset_y = b.properties[:OffsetY]
+        
+        # Your custom publishing logic here
+        publish_frame_with_metadata(agent, config.stream_index, frame, offset_x, offset_y)
+    else
+        # Default behavior for other properties
+        publish_property(agent, config)
+    end
+    return Hsm.EventHandled
+end
+```
+
+**Note**: The property poller still manages all timing logic - your handler only customizes the publishing mechanism.
+
+For detailed architecture documentation, see [`docs/EVENT_BASED_PROPERTY_PUBLISHING.md`](docs/EVENT_BASED_PROPERTY_PUBLISHING.md).
 
 ### Publishing Status Events
 
