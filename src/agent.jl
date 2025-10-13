@@ -266,9 +266,10 @@ function property_poller(agent::AbstractRtcAgent)
     @inbounds for i in 1:length(registry)
         config = registry[i]
         property_timestamp_ns = last_update(b.properties, config.field)
-        
+
         if should_publish(config.strategy, config.last_published_ns,
                          config.next_scheduled_ns, property_timestamp_ns, now)
+            b.source_correlation_id = next_id(b.id_gen)
             dispatch!(agent, :PublishProperty, config)
             config.last_published_ns = now
             config.next_scheduled_ns = next_time(config.strategy, now)
