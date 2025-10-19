@@ -218,7 +218,17 @@ function _precompile_rtcframework()
     precompile(Tuple{typeof(register_poller!),Function,AbstractRtcAgent,Int,Symbol})
     precompile(Tuple{typeof(unregister_poller!),AbstractRtcAgent,Symbol})
     precompile(Tuple{typeof(clear_pollers!),AbstractRtcAgent})
-    precompile(Tuple{typeof(list_pollers),AbstractRtcAgent})
+    precompile(Tuple{typeof(pollers),AbstractRtcAgent})
+    
+    # PollerLoop collections interface
+    precompile(Tuple{typeof(Base.in),Symbol,PollerLoop})
+    precompile(Tuple{typeof(Base.in),Symbol,AbstractRtcAgent})
+    precompile(Tuple{typeof(Base.length),PollerLoop})
+    precompile(Tuple{typeof(Base.isempty),PollerLoop})
+    precompile(Tuple{typeof(Base.empty!),PollerLoop})
+    precompile(Tuple{typeof(Base.getindex),PollerLoop,Int})
+    precompile(Tuple{typeof(Base.iterate),PollerLoop})
+    precompile(Tuple{typeof(Base.iterate),PollerLoop,Int})
 
     # PollerConfig construction
     precompile(Tuple{typeof(PollerConfig),PollerFunction,Int,Symbol})

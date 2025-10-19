@@ -42,8 +42,8 @@ export @base_properties
 export PropertyError, PropertyNotFoundError, EnvironmentVariableError
 
 # Poller system
-export register_poller!, unregister_poller!, clear_pollers!, list_pollers
-export PollerFunction, PollerConfig
+export register_poller!, unregister_poller!, clear_pollers!, pollers
+export PollerFunction, PollerConfig, PollerLoop
 
 # Core types
 export AbstractRtcAgent, BaseRtcAgent, base

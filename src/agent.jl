@@ -24,7 +24,7 @@ transitions. Generic parameters allow customization of core components.
 - `control_adapter::Union{Nothing,ControlStreamAdapter}`: control message handler
 - `input_adapters::Vector{InputStreamAdapter}`: input stream processors
 - `property_registry::Vector{PublicationConfig}`: registered property configs
-- `pollers::Vector{PollerConfig}`: registered pollers in priority order
+- `poller_loop::PollerLoop`: poller management with deferred add/remove
 """
 mutable struct BaseRtcAgent{C<:AbstractClock,P<:AbstractStaticKV,ID<:SnowflakeIdGenerator,ET<:PolledTimer}
     clock::C
@@ -38,7 +38,7 @@ mutable struct BaseRtcAgent{C<:AbstractClock,P<:AbstractStaticKV,ID<:SnowflakeId
     control_adapter::Union{Nothing,ControlStreamAdapter}
     input_adapters::Vector{InputStreamAdapter}
     property_registry::Vector{PublicationConfig}
-    pollers::Vector{PollerConfig}
+    poller_loop::PollerLoop
 end
 
 function BaseRtcAgent(comms::CommunicationResources, properties::AbstractStaticKV, clock::C=CachedEpochClock(EpochClock())) where {C<:Clocks.AbstractClock}
@@ -60,7 +60,7 @@ function BaseRtcAgent(comms::CommunicationResources, properties::AbstractStaticK
         nothing,
         InputStreamAdapter[],
         PublicationConfig[],
-        PollerConfig[]
+        PollerLoop()
     )
 end
 
@@ -156,21 +156,14 @@ end
 Perform one unit of work by polling all registered pollers in priority order.
 
 Updates the clock and executes all pollers (built-in and custom) sorted by priority.
+Applies any pending add/remove operations after the poll cycle completes.
 Returns the total number of work items processed.
 """
 function Agent.do_work(agent::AbstractRtcAgent)
     b = base(agent)
     fetch!(b.clock)
 
-    work_count = 0
-    pollers = b.pollers
-
-    # Type-stable iteration over pollers
-    @inbounds for i in 1:length(pollers)
-        work_count += pollers[i].poll_fn(agent)
-    end
-
-    return work_count
+    return poll_pollers!(b.poller_loop, agent)
 end
 
 # =============================================================================
@@ -197,6 +190,9 @@ function register_builtin_pollers!(agent::AbstractRtcAgent)
 
     # Control stream polling (lowest priority of built-ins)
     register_poller!(control_poller, agent, PRIORITY_CONTROL; name=:control_stream)
+
+    # Apply all builtin registrations in one batch
+    apply_poller_changes!(base(agent).poller_loop)
 end
 
 # =============================================================================

@@ -162,6 +162,16 @@ function publish_status_event(
     nothing
 end
 
+function publish_status_event(
+    proxy::StatusProxy,
+    field::Symbol,
+    value,
+    tag::AbstractString,
+    correlation_id::Int64,
+    timestamp_ns::Int64)
+    throw(ArgumentError("Unsupported value type for status event: $(typeof(value))"))
+end
+
 """
     publish_state_change(proxy, new_state, tag, correlation_id, timestamp_ns)
 

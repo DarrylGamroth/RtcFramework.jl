@@ -24,7 +24,7 @@ only service-specific properties afterward.
 ```julia
 @kvstore MyServiceProperties begin
     @base_properties
-    
+
     # Service-specific properties only
     Temperature::Float32 => (0.0f0;)
     Threshold::Float32 => (100.0f0;)
@@ -35,21 +35,21 @@ macro base_properties()
     # Generate SUB_DATA_URI keys inline
     sub_keys = []
     sub_connection_count = 0
-    
+
     for (key, value) in ENV
         if startswith(key, "SUB_DATA_URI_")
             sub_connection_count += 1
             idx = parse(Int, replace(key, "SUB_DATA_URI_" => ""))
             uri_field = Symbol("SubDataURI$(idx)")
             stream_field = Symbol("SubDataStreamID$(idx)")
-            
+
             push!(sub_keys, :(
                 $uri_field::String => (
                     $value;
                     access = AccessMode.READABLE
                 )
             ))
-            
+
             stream_key = "SUB_DATA_STREAM_$(idx)"
             if haskey(ENV, stream_key)
                 stream_value = parse(Int, ENV[stream_key])
@@ -62,32 +62,32 @@ macro base_properties()
             end
         end
     end
-    
+
     push!(sub_keys, :(
         SubDataConnectionCount::Int64 => (
             $sub_connection_count;
             access = AccessMode.READABLE
         )
     ))
-    
+
     # Generate PUB_DATA_URI keys inline
     pub_keys = []
     pub_connection_count = 0
-    
+
     for (key, value) in ENV
         if startswith(key, "PUB_DATA_URI_")
             pub_connection_count += 1
             idx = parse(Int, replace(key, "PUB_DATA_URI_" => ""))
             uri_field = Symbol("PubDataURI$(idx)")
             stream_field = Symbol("PubDataStreamID$(idx)")
-            
+
             push!(pub_keys, :(
                 $uri_field::String => (
                     $value;
                     access = AccessMode.READABLE
                 )
             ))
-            
+
             stream_key = "PUB_DATA_STREAM_$(idx)"
             if haskey(ENV, stream_key)
                 stream_value = parse(Int, ENV[stream_key])
@@ -100,14 +100,14 @@ macro base_properties()
             end
         end
     end
-    
+
     push!(pub_keys, :(
         PubDataConnectionCount::Int64 => (
             $pub_connection_count;
             access = AccessMode.READABLE
         )
     ))
-    
+
     return esc(quote
         Name::String => (
             get(ENV, "BLOCK_NAME") do
@@ -169,10 +169,21 @@ macro base_properties()
                 return val
             end
         )
-        GCBytes::Int64 => (
-            0;
-            access=AccessMode.READABLE,
-            on_get=(obj, name, val) -> Base.gc_bytes()
+        TriggerGC::Bool => (
+            false;
+            access = AccessMode.WRITABLE,
+            on_set=(obj, name, val) -> (GC.gc(val); val),
+        )
+        GCStatsPeriodNs::Int64 => (
+            parse(Int64, get(ENV, "GC_STATS_PERIOD_NS", "10000000000"))
+        )
+        GCNum::Base.GC_Num => (
+            Base.gc_num();
+            access = AccessMode.READABLE
+        )
+        GCDiff::Base.GC_Diff => (
+            ;
+            access = AccessMode.READABLE
         )
         GCEnable::Bool => (
             true;

@@ -119,6 +119,17 @@ function publish_property(
     nothing
 end
 
+function publish_property(
+    proxy::PropertyProxy,
+    stream_index::Int,
+    field::Symbol,
+    value,
+    tag::AbstractString,
+    correlation_id::Int64,
+    timestamp_ns::Int64)
+    throw(ArgumentError("Unsupported value type for property: $(typeof(value))"))
+end
+
 """
     publish_property_update(proxy, config, properties, tag, correlation_id, now)
 
@@ -130,13 +141,13 @@ at the current time, then handles the publication and updates timing state.
 function publish_property_update(proxy::PropertyProxy, config::PublicationConfig, properties::AbstractStaticKV, tag::String, correlation_id::Int64, now::Int64)
     property_timestamp_ns = last_update(properties, config.field)
     if !should_publish(config.strategy, config.last_published_ns,
-                      config.next_scheduled_ns, property_timestamp_ns, now)
+        config.next_scheduled_ns, property_timestamp_ns, now)
         return 0
     end
 
     # Use proxy directly with business logic parameters
     publish_property(proxy, config.stream_index, config.field, properties[config.field],
-                    tag, correlation_id, now)
+        tag, correlation_id, now)
 
     config.last_published_ns = now
     config.next_scheduled_ns = next_time(config.strategy, now)

@@ -44,6 +44,7 @@ include("test_exceptions.jl")
 include("test_pollers.jl")
 include("test_accessors.jl")
 include("test_integration.jl")
+include("test_onupdate_integration.jl")
 
 # Run all test suites with organized structure
 @testset "RtcFramework.jl Tests" begin
@@ -95,6 +96,10 @@ include("test_integration.jl")
 
                 @testset "Integration Tests" begin
                     test_integration(client)
+                end
+
+                @testset "OnUpdate Integration Tests" begin
+                    test_onupdate_with_cached_timer(client)
                 end
             end
         end

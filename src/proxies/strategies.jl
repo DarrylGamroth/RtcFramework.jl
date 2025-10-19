@@ -108,6 +108,11 @@ end
     ::Int64,
     property_timestamp_ns::Int64,
     current_time_ns::Int64)
+    # First publication - always publish
+    if last_published_ns < 0
+        return true
+    end
+    
     # Publish if the property was updated since the last publication
     # This allows OnUpdate to work when properties are modified between polling cycles
     return property_timestamp_ns > last_published_ns

@@ -5,6 +5,7 @@
 
 @on_entry function (sm::AbstractRtcAgent, state::Top)
     schedule!(base(sm).timers, 0, :Heartbeat)
+    schedule!(base(sm).timers, 0, :GCStats)
 end
 
 @on_exit function (sm::AbstractRtcAgent, state::Top)
@@ -26,6 +27,21 @@ end
     return Hsm.EventHandled
 end
 
+@on_event function (sm::AbstractRtcAgent, ::Top, event::GCStats, now::Int64)
+    # b = base(sm)
+    # new_stats = GC.gc_num()
+
+    # # Update GCBytes property
+    # b.properties[:GCBytes] = GC.gc_bytes()
+
+    # # Reschedule the next GCStats event
+    # next_gc_time = now + b.properties[:GCStatsPeriodNs]
+    # schedule_at!(b.timers, next_gc_time, :GCStats)
+
+    return Hsm.EventHandled
+end
+
+
 @on_event function (sm::AbstractRtcAgent, ::Top, event::Error, (e, exception))
     publish_event_response(sm, event, exception)
     @error "Error in dispatching event $e" exception
@@ -41,11 +57,6 @@ end
 
 @on_event function (sm::AbstractRtcAgent, ::Top, event::State, _)
     publish_event_response(sm, event, Hsm.current(sm))
-    return Hsm.EventHandled
-end
-
-@on_event function (sm::AbstractRtcAgent, ::Top, ::GC, _)
-    GC.gc()
     return Hsm.EventHandled
 end
 
