@@ -92,7 +92,7 @@ and publishes a status event confirming the change.
 """
 function on_property_write(sm::AbstractRtcAgent, event, message)
     b = base(sm)
-    prop_type = keytype(b.properties, event)
+    prop_type = valtype(b.properties, event)
     value = decode_property_value(message, prop_type)
 
     set_property_value!(b.properties, event, value, prop_type)
