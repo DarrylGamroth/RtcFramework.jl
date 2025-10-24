@@ -19,7 +19,7 @@ function publish_status_event(agent::AbstractRtcAgent, event::Symbol, data)
     timestamp = time_nanos(b.clock)
     proxy = b.status_proxy::StatusProxy
 
-    return publish_status_event(
+    publish_status_event(
         proxy, event, data, b.properties[:Name], b.source_correlation_id, timestamp
     )
 end
@@ -36,7 +36,7 @@ function publish_state_change(agent::AbstractRtcAgent, new_state::Symbol)
     timestamp = time_nanos(b.clock)
     proxy = b.status_proxy::StatusProxy
 
-    return publish_state_change(
+    publish_state_change(
         proxy, new_state, b.properties[:Name], b.source_correlation_id, timestamp
     )
 end
@@ -53,7 +53,7 @@ function publish_event_response(agent::AbstractRtcAgent, event::Symbol, value)
     timestamp = time_nanos(b.clock)
     proxy = b.status_proxy::StatusProxy
 
-    return publish_event_response(
+    publish_event_response(
         proxy, event, value, b.properties[:Name], b.source_correlation_id, timestamp
     )
 end
@@ -75,7 +75,7 @@ function publish_property(agent::AbstractRtcAgent, stream_index::Int, field::Sym
     timestamp = time_nanos(b.clock)
     proxy = b.property_proxy::PropertyProxy
 
-    return publish_property(proxy, stream_index, field, value,
+    publish_property(proxy, stream_index, field, value,
         b.properties[:Name], b.source_correlation_id, timestamp)
 end
 
@@ -92,6 +92,6 @@ function publish_property(agent::AbstractRtcAgent, config::PublicationConfig)
     timestamp = time_nanos(b.clock)
     proxy = b.property_proxy::PropertyProxy
 
-    return publish_property(proxy, config.stream_index, config.field, 
+    publish_property(proxy, config.stream_index, config.field, 
         b.properties[config.field], b.properties[:Name], b.source_correlation_id, timestamp)
 end
