@@ -1,7 +1,7 @@
 name = "RtcFramework"
 uuid = "942aeb66-1abd-4b3e-88de-97d1762fce18"
 authors = ["Darryl Gamroth <dgamroth@rubus.ca>"]
-version = "0.1.6"
+version = "0.1.7"
 
 [deps]
 Aeron = "b850ffb1-6704-484e-996b-4710e2f097f0"
@@ -29,7 +29,7 @@ Logging = "1"
 SnowflakeId = "0.1"
 SpidersFragmentFilters = "0.4"
 SpidersMessageCodecs = "0.12"
-StaticKV = "0.6"
+StaticKV = "0.7"
 UnsafeArrays = "1"
 WrappedUnions = "0.3"
 

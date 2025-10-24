@@ -21,6 +21,7 @@ const DEFAULT_INPUT_FRAGMENT_COUNT_LIMIT = 10
 const DEFAULT_CONTROL_FRAGMENT_COUNT_LIMIT = 1
 
 include("exceptions.jl")
+include("counters.jl")
 include("property_utilities.jl")
 include("abstract_agent.jl")
 include("pollers.jl")
@@ -37,8 +38,14 @@ include("precompile.jl")
 
 # Exports
 
+# Counter system
+export CounterId, CounterMetadata, COUNTER_METADATA, BASE_COUNTER_TYPE_ID
+export Counters, get_counter, increment_counter!, set_counter!
+export TOTAL_DUTY_CYCLES, TOTAL_WORK_DONE, PROPERTIES_PUBLISHED
+
 # Property system
 export @base_properties
+export GCStats
 export PropertyError, PropertyNotFoundError, EnvironmentVariableError
 
 # Poller system

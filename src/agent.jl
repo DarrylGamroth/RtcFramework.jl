@@ -25,6 +25,10 @@ transitions. Generic parameters allow customization of core components.
 - `input_adapters::Vector{InputStreamAdapter}`: input stream processors
 - `property_registry::Vector{PublicationConfig}`: registered property configs
 - `poller_loop::PollerLoop`: poller management with deferred add/remove
+- `counters::Counters`: Aeron-allocated performance counters for external observability
+- `last_stats_time::Int64`: timestamp of last stats update (nanoseconds)
+- `last_msg_count::Int64`: message count at last stats update (for rate calculation)
+- `last_work_count::Int64`: work count at last stats update (for rate calculation)
 """
 mutable struct BaseRtcAgent{C<:AbstractClock,P<:AbstractStaticKV,ID<:SnowflakeIdGenerator,ET<:PolledTimer}
     clock::C
@@ -39,6 +43,10 @@ mutable struct BaseRtcAgent{C<:AbstractClock,P<:AbstractStaticKV,ID<:SnowflakeId
     input_adapters::Vector{InputStreamAdapter}
     property_registry::Vector{PublicationConfig}
     poller_loop::PollerLoop
+    counters::Counters
+    last_stats_time::Int64
+    last_msg_count::Int64
+    last_work_count::Int64
 end
 
 function BaseRtcAgent(comms::CommunicationResources, properties::AbstractStaticKV, clock::C=CachedEpochClock(EpochClock())) where {C<:Clocks.AbstractClock}
@@ -46,6 +54,11 @@ function BaseRtcAgent(comms::CommunicationResources, properties::AbstractStaticK
 
     id_gen = SnowflakeIdGenerator(properties[:NodeId], clock)
     timers = PolledTimer(clock)
+
+    # Allocate Aeron counters for observability with agent identification
+    agent_id = properties[:NodeId]
+    agent_name = properties[:Name]
+    counters = Counters(comms.client, agent_id, agent_name)
 
     # Create the agent with proxy fields initialized to nothing
     BaseRtcAgent(
@@ -60,7 +73,11 @@ function BaseRtcAgent(comms::CommunicationResources, properties::AbstractStaticK
         nothing,
         InputStreamAdapter[],
         PublicationConfig[],
-        PollerLoop()
+        PollerLoop(),
+        counters,
+        0,
+        0,
+        0
     )
 end
 
@@ -163,7 +180,13 @@ function Agent.do_work(agent::AbstractRtcAgent)
     b = base(agent)
     fetch!(b.clock)
 
-    return poll_pollers!(b.poller_loop, agent)
+    work_count = poll_pollers!(b.poller_loop, agent)
+
+    counters = b.counters
+    increment_counter!(counters, TOTAL_DUTY_CYCLES)
+    increment_counter!(counters, TOTAL_WORK_DONE, work_count)
+
+    return work_count
 end
 
 # =============================================================================
@@ -271,6 +294,10 @@ function property_poller(agent::AbstractRtcAgent)
             config.next_scheduled_ns = next_time(config.strategy, now)
             count += 1
         end
+    end
+
+    if count > 0
+        increment_counter!(b.counters, PROPERTIES_PUBLISHED, count)
     end
 
     return count

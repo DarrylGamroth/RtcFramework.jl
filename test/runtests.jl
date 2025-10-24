@@ -34,6 +34,7 @@ ENV["SUB_DATA_STREAM_2"] = "3002"
 
 # Include individual test modules
 include("test_strategies.jl")
+include("test_counters.jl")
 include("test_rtcagent.jl")
 include("test_adapters.jl")
 include("test_property_publishing.jl")
@@ -62,6 +63,10 @@ include("test_onupdate_integration.jl")
         Aeron.Context() do context
             Aeron.aeron_dir!(context, MediaDriver.aeron_dir(driver))
             Aeron.Client(context) do client
+                @testset "Counter System Tests" begin
+                    test_counters(client)
+                end
+
                 @testset "RtcAgent Core Tests" begin
                     test_rtcagent(client)
                 end

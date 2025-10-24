@@ -6,6 +6,83 @@ with dynamic URI/stream configuration from environment variables.
 """
 
 """
+    GCStats
+
+Wrapper struct for Base.GC_Num with abbreviated field names to fit SBE constraints.
+Field names are shortened from Base.GC_Num to stay within SBE key field length limits.
+"""
+struct GCStats
+    allocd::Int64
+    deferred_alloc::Int64
+    freed::Int64
+    malloc::Int64
+    realloc::Int64
+    poolalloc::Int64
+    bigalloc::Int64
+    freecall::Int64
+    total_time::Int64
+    total_allocd::Int64
+    collect::UInt64
+    pause::Int32
+    full_sweep::Int32
+    max_pause::Int64
+    max_memory::Int64
+    safepoint_time::Int64  # was: time_to_safepoint
+    max_safepoint_time::Int64  # was: max_time_to_safepoint
+    total_safepoint_time::Int64  # was: total_time_to_safepoint
+    sweep_time::Int64
+    mark_time::Int64
+    stack_sweep_time::Int64  # was: stack_pool_sweep_time
+    total_sweep_time::Int64
+    sweep_page_walk_time::Int64  # was: total_sweep_page_walk_time
+    sweep_madvise_time::Int64  # was: total_sweep_madvise_time
+    sweep_free_malloc_time::Int64  # was: total_sweep_free_mallocd_memory_time
+    total_mark_time::Int64
+    total_stack_sweep_time::Int64  # was: total_stack_pool_sweep_time
+    last_full_sweep::Int64
+    last_inc_sweep::Int64  # was: last_incremental_sweep
+end
+
+"""
+    GCStats(gc_num::Base.GC_Num)
+
+Convert Base.GC_Num to GCStats with abbreviated field names.
+"""
+function GCStats(gc_num::Base.GC_Num)
+    GCStats(
+        gc_num.allocd,
+        gc_num.deferred_alloc,
+        gc_num.freed,
+        gc_num.malloc,
+        gc_num.realloc,
+        gc_num.poolalloc,
+        gc_num.bigalloc,
+        gc_num.freecall,
+        gc_num.total_time,
+        gc_num.total_allocd,
+        gc_num.collect,
+        gc_num.pause,
+        gc_num.full_sweep,
+        gc_num.max_pause,
+        gc_num.max_memory,
+        gc_num.time_to_safepoint,
+        gc_num.max_time_to_safepoint,
+        gc_num.total_time_to_safepoint,
+        gc_num.sweep_time,
+        gc_num.mark_time,
+        gc_num.stack_pool_sweep_time,
+        gc_num.total_sweep_time,
+        gc_num.total_sweep_page_walk_time,
+        gc_num.total_sweep_madvise_time,
+        gc_num.total_sweep_free_mallocd_memory_time,
+        gc_num.total_mark_time,
+        gc_num.total_stack_pool_sweep_time,
+        gc_num.last_full_sweep,
+        gc_num.last_incremental_sweep
+    )
+end
+
+"""
     @base_properties
 
 Generate all standard RTC framework properties that every service needs.
@@ -108,6 +185,29 @@ macro base_properties()
         )
     ))
 
+    # Generate GC statistics fields as individual properties using GCStats struct
+    gc_keys = []
+    for fname in fieldnames(RtcFramework.GCStats)
+        field_type = fieldtype(RtcFramework.GCStats, fname)
+        prop_name = Symbol("GC_", fname)
+        default_val = zero(field_type)
+        push!(gc_keys, :(
+            $prop_name::$field_type => $default_val
+        ))
+    end
+
+    # Generate performance counter properties from COUNTER_METADATA
+    counter_keys = []
+    for metadata in RtcFramework.COUNTER_METADATA
+        prop_name = Symbol(metadata.label)
+        push!(counter_keys, :(
+            $prop_name::Int64 => (
+                0;
+                access = AccessMode.READABLE
+            )
+        ))
+    end
+
     return esc(quote
         Name::String => (
             get(ENV, "BLOCK_NAME") do
@@ -177,17 +277,10 @@ macro base_properties()
         GCStatsPeriodNs::Int64 => (
             parse(Int64, get(ENV, "GC_STATS_PERIOD_NS", "10000000000"))
         )
-        GCNum::Base.GC_Num => (
-            Base.gc_num();
-            access = AccessMode.READABLE
-        )
-        GCDiff::Base.GC_Diff => (
-            ;
-            access = AccessMode.READABLE
-        )
+                
         GCEnable::Bool => (
             true;
-            on_set=(obj, name, val) -> GC.enable(val),
+            on_set=(obj, name, val) -> (GC.enable(val); val),
         )
         GCLogging::Bool => (
             parse(Bool, get(ENV, "GC_LOGGING", "false"));
@@ -195,6 +288,29 @@ macro base_properties()
             on_get=(obj, name, val) -> GC.logging_enabled()
         )
 
+        $(gc_keys...)
+        
+        # Performance counters (auto-generated from COUNTER_METADATA)
+        # Minimal set: TotalDutyCycles, TotalWorkDone, PropertiesPublished
+        $(counter_keys...)
+        
+        # Derived metrics (calculated periodically from counters)
+        # MessageRateHz = property publication rate (from PROPERTIES_PUBLISHED counter)
+        # WorkRateHz = work processing rate (from TOTAL_WORK_DONE counter)
+        MessageRateHz::Float64 => (
+            0.0;
+            access = AccessMode.READABLE
+        )
+        WorkRateHz::Float64 => (
+            0.0;
+            access = AccessMode.READABLE
+        )
+        
+        # Stats update period (5 seconds default)
+        StatsPeriodNs::Int64 => (
+            parse(Int64, get(ENV, "STATS_PERIOD_NS", "5000000000"))
+        )
+        
         $(sub_keys...)
         $(pub_keys...)
     end)
