@@ -37,7 +37,21 @@ struct PollerLoop
     remove::Vector{Symbol}
 end
 
-PollerLoop() = PollerLoop(PollerConfig[], PollerConfig[], Symbol[])
+function PollerLoop()
+    pollers = Vector{PollerConfig}()
+    add = Vector{PollerConfig}()
+    remove = Vector{Symbol}()
+    @static if VERSION >= v"1.11"
+        sizehint!(pollers, 10; shrink=false)
+        sizehint!(add, 10; shrink=false)
+        sizehint!(remove, 10; shrink=false)
+    else
+        sizehint!(pollers, 10)
+        sizehint!(add, 10)
+        sizehint!(remove, 10)
+    end
+    return PollerLoop(pollers, add, remove)
+end
 
 # =============================================================================
 # Collections Interface for PollerLoop
@@ -145,8 +159,8 @@ Safe to call from within a poller function.
 """
 function request_remove!(loop::PollerLoop, name::Symbol)
     # Cancel pending additions with the same name before queueing removal.
-    for i in length(loop.add):-1:1
-        if loop.add[i].name == name
+    for (i, config) in Iterators.reverse(pairs(loop.add))
+        if config.name == name
             deleteat!(loop.add, i)
             return nothing
         end
@@ -206,8 +220,7 @@ add/remove operations afterwards.
     pollers = loop.pollers
     work_count = 0
 
-    # Type-stable iteration over current snapshot of pollers. Structural changes
-    # are deferred via the add/remove buffers.
+    # Structural changes are deferred via the add/remove buffers.
     @inbounds for i in 1:length(pollers)
         work_count += pollers[i].poll_fn(agent)
     end
