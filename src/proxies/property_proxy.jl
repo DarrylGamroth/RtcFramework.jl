@@ -127,7 +127,9 @@ function publish_property(
     tag::AbstractString,
     correlation_id::Int64,
     timestamp_ns::Int64)
-    throw(ArgumentError("Unsupported value type for property: $(typeof(value))"))
+
+    # Fallback for unsupported types - treat as nothing
+    publish_property(proxy, stream_index, field, nothing, tag, correlation_id, timestamp_ns)
 end
 
 """
