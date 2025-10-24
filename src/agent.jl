@@ -148,6 +148,9 @@ function Agent.on_close(agent::AbstractRtcAgent)
     # Clear all pollers
     clear_pollers!(agent)
 
+    # Close counters
+    close(b.counters)
+
     # Close communication resources
     close(b.comms)
 

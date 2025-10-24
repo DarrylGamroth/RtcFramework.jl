@@ -161,25 +161,25 @@ This enables AeronStat to display counters with context:
 """
 function Counters(client::Aeron.Client, agent_id::Int64, agent_name::String)
     vec = Vector{Aeron.Counter}(undef, length(instances(CounterId)))
-    
+
     # Create key buffer with agent ID and name for counter identification
     # Format: [agent_id (8 bytes)] [agent_name (UTF-8 string)]
     name_bytes = codeunits(agent_name)
     key_buffer = Vector{UInt8}(undef, sizeof(Int64) + length(name_bytes))
-    
+
     # Write agent_id (first 8 bytes)
     key_buffer[1:8] .= reinterpret(UInt8, [agent_id])
-    
+
     # Write agent_name (remaining bytes)
     key_buffer[9:end] .= name_bytes
-    
+
     @inbounds for metadata in COUNTER_METADATA
         idx = Int(metadata.id)
         # Construct label with agent identification
         label = "$(metadata.label): NodeId=$agent_id Name=$agent_name"
         vec[idx] = Aeron.add_counter(client, metadata.type_id, key_buffer, label)
     end
-    
+
     return Counters(vec, agent_id, agent_name)
 end
 
@@ -225,5 +225,20 @@ Uses Aeron's atomic set operation for thread-safe updates.
 """
 @inline function set_counter!(counter::Aeron.Counter, value::Int64)
     counter[] = value
+    nothing
+end
+
+"""
+    Base.close(counters::Counters)
+
+Close all Aeron counters in the Counters container.
+
+This should be called during agent shutdown to properly release counter resources
+in the MediaDriver's shared memory.
+"""
+function Base.close(counters::Counters)
+    for counter in counters.vec
+        close(counter)
+    end
     nothing
 end

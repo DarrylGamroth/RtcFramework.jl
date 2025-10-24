@@ -219,7 +219,7 @@ function _precompile_rtcframework()
     precompile(Tuple{typeof(unregister_poller!),AbstractRtcAgent,Symbol})
     precompile(Tuple{typeof(clear_pollers!),AbstractRtcAgent})
     precompile(Tuple{typeof(pollers),AbstractRtcAgent})
-    
+
     # PollerLoop collections interface
     precompile(Tuple{typeof(Base.in),Symbol,PollerLoop})
     precompile(Tuple{typeof(Base.in),Symbol,AbstractRtcAgent})
@@ -336,6 +336,22 @@ function _precompile_rtcframework()
 
     # ID generation
     precompile(Tuple{typeof(SnowflakeId.next_id),IdGenType})
+
+    # =============================================================================
+    # Counter System - Performance Counters
+    # =============================================================================
+
+    # Counter construction
+    precompile(Tuple{typeof(Counters),Aeron.Client,Int64,String})
+
+    # Counter operations - hot path functions called in do_work
+    precompile(Tuple{typeof(get_counter),Counters,CounterId})
+    precompile(Tuple{typeof(increment_counter!),Counters,CounterId})
+    precompile(Tuple{typeof(increment_counter!),Counters,CounterId,Int})
+    precompile(Tuple{typeof(set_counter!),Aeron.Counter,Int64})
+
+    # Counter lifecycle
+    precompile(Tuple{typeof(Base.close),Counters})
 
     # =============================================================================
     # Utility Functions
