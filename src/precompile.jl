@@ -215,20 +215,20 @@ function _precompile_rtcframework()
     # =============================================================================
 
     # Poller registration and management
-    precompile(Tuple{typeof(register_poller!),Function,AbstractRtcAgent,Int,Symbol})
+    precompile(Tuple{typeof(register_poller!),Function,AbstractRtcAgent,Symbol,Int})
     precompile(Tuple{typeof(unregister_poller!),AbstractRtcAgent,Symbol})
     precompile(Tuple{typeof(clear_pollers!),AbstractRtcAgent})
     precompile(Tuple{typeof(pollers),AbstractRtcAgent})
 
-    # PollerLoop collections interface
-    precompile(Tuple{typeof(Base.in),Symbol,PollerLoop})
+    # PollerRegistry collections interface
+    precompile(Tuple{typeof(Base.in),Symbol,PollerRegistry})
     precompile(Tuple{typeof(Base.in),Symbol,AbstractRtcAgent})
-    precompile(Tuple{typeof(Base.length),PollerLoop})
-    precompile(Tuple{typeof(Base.isempty),PollerLoop})
-    precompile(Tuple{typeof(Base.empty!),PollerLoop})
-    precompile(Tuple{typeof(Base.getindex),PollerLoop,Int})
-    precompile(Tuple{typeof(Base.iterate),PollerLoop})
-    precompile(Tuple{typeof(Base.iterate),PollerLoop,Int})
+    precompile(Tuple{typeof(Base.length),PollerRegistry})
+    precompile(Tuple{typeof(Base.isempty),PollerRegistry})
+    precompile(Tuple{typeof(Base.empty!),PollerRegistry})
+    precompile(Tuple{typeof(Base.getindex),PollerRegistry,Int})
+    precompile(Tuple{typeof(Base.iterate),PollerRegistry})
+    precompile(Tuple{typeof(Base.iterate),PollerRegistry,Int})
 
     # PollerConfig construction
     precompile(Tuple{typeof(PollerConfig),PollerFunction,Int,Symbol})
@@ -245,9 +245,6 @@ function _precompile_rtcframework()
     precompile(Tuple{typeof(control_poller),AbstractRtcAgent})
     precompile(Tuple{typeof(timer_poller),AbstractRtcAgent})
     precompile(Tuple{typeof(property_poller),AbstractRtcAgent})
-
-    # Built-in poller registration
-    precompile(Tuple{typeof(register_builtin_pollers!),AbstractRtcAgent})
 
     # =============================================================================
     # Timer System Hot Paths

@@ -9,15 +9,17 @@ export JULIA_NUM_THREADS="4"
 export JULIA_PROJECT="$SCRIPT_DIR"
 export HEARTBEAT_PERIOD_NS=10000000000
 export BLOCK_NAME="TestService"
-export BLOCK_ID=367
+export BLOCK_ID=999
 export LOG_LEVEL="Debug"
 export GC_LOGGING=false
 
-export STATUS_URI="aeron:udp?endpoint=0.0.0.0:40123"
-export STATUS_STREAM_ID=1
+export CONTROL_PLANE_INTERFACE="127.0.0.1"
 
-export CONTROL_URI="aeron-spy:aeron:udp?endpoint=0.0.0.0:40123"
-export CONTROL_STREAM_ID=2
+export CONTROL_URI="aeron:udp?endpoint=239.192.10.101:40100|interface=${CONTROL_PLANE_INTERFACE}|ttl=1"
+export CONTROL_STREAM_ID=10
+
+export STATUS_URI="aeron:udp?endpoint=239.192.10.111:40100|interface=${CONTROL_PLANE_INTERFACE}|ttl=1"
+export STATUS_STREAM_ID=100
 
 export CONTROL_FILTER="(All|TestService)"
 

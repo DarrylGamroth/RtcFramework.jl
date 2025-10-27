@@ -21,7 +21,7 @@ struct PollerConfig
 end
 
 """
-    PollerLoop
+    PollerRegistry
 
 Internal structure for managing pollers with deferred add/remove operations.
 Pollers can safely request add/remove during iteration without breaking the loop.
@@ -31,13 +31,13 @@ Pollers can safely request add/remove during iteration without breaking the loop
 - `add::Vector{PollerConfig}`: Buffer for pollers to add after iteration
 - `remove::Vector{Symbol}`: Names queued for removal after iteration
 """
-struct PollerLoop
+struct PollerRegistry
     pollers::Vector{PollerConfig}
     add::Vector{PollerConfig}
     remove::Vector{Symbol}
 end
 
-function PollerLoop()
+function PollerRegistry()
     pollers = Vector{PollerConfig}()
     add = Vector{PollerConfig}()
     remove = Vector{Symbol}()
@@ -50,50 +50,50 @@ function PollerLoop()
         sizehint!(add, 10)
         sizehint!(remove, 10)
     end
-    return PollerLoop(pollers, add, remove)
+    return PollerRegistry(pollers, add, remove)
 end
 
 # =============================================================================
-# Collections Interface for PollerLoop
+# Collections Interface for PollerRegistry
 # =============================================================================
 
 """
-Implement the collections interface for PollerLoop.
+Implement the collections interface for PollerRegistry.
 Allows iteration, length queries, and indexed access to active pollers.
 """
 
 # Iteration interface - iterate over active pollers only
-Base.iterate(loop::PollerLoop) = iterate(loop.pollers)
-Base.iterate(loop::PollerLoop, state) = iterate(loop.pollers, state)
+Base.iterate(registry::PollerRegistry) = iterate(registry.pollers)
+Base.iterate(registry::PollerRegistry, state) = iterate(registry.pollers, state)
 
 # Length and size
-Base.length(loop::PollerLoop) = length(loop.pollers)
-Base.size(loop::PollerLoop) = (length(loop.pollers),)
+Base.length(registry::PollerRegistry) = length(registry.pollers)
+Base.size(registry::PollerRegistry) = (length(registry.pollers),)
 
 # Element type
-Base.eltype(::Type{PollerLoop}) = PollerConfig
+Base.eltype(::Type{PollerRegistry}) = PollerConfig
 
 # Indexed access - read-only access to active pollers
-Base.getindex(loop::PollerLoop, i::Int) = loop.pollers[i]
+Base.getindex(registry::PollerRegistry, i::Int) = registry.pollers[i]
 
 # Keys for dictionary-like access (1-based indexing)
-Base.keys(loop::PollerLoop) = keys(loop.pollers)
-Base.firstindex(loop::PollerLoop) = 1
-Base.lastindex(loop::PollerLoop) = length(loop.pollers)
+Base.keys(registry::PollerRegistry) = keys(registry.pollers)
+Base.firstindex(registry::PollerRegistry) = 1
+Base.lastindex(registry::PollerRegistry) = length(registry.pollers)
 
 # Check if empty
-Base.isempty(loop::PollerLoop) = isempty(loop.pollers)
+Base.isempty(registry::PollerRegistry) = isempty(registry.pollers)
 
 # Empty the collection
-function Base.empty!(loop::PollerLoop)
-    empty!(loop.add)
-    empty!(loop.remove)
-    empty!(loop.pollers)
-    return loop
+function Base.empty!(registry::PollerRegistry)
+    empty!(registry.add)
+    empty!(registry.remove)
+    empty!(registry.pollers)
+    return registry
 end
 
 # Membership test - check if poller name exists
-Base.in(name::Symbol, loop::PollerLoop) = any(c -> c.name == name, loop.pollers)
+Base.in(name::Symbol, registry::PollerRegistry) = any(c -> c.name === name, registry.pollers)
 
 # Built-in poller priorities (internal constants, not exported)
 const PRIORITY_INPUT = 10              # Input stream polling
@@ -102,80 +102,67 @@ const PRIORITY_TIMER = 75              # Timer events
 const PRIORITY_CONTROL = 200           # Control messages
 
 # =============================================================================
-# Internal PollerLoop Operations
+# Internal PollerRegistry Operations
 # =============================================================================
 
 """
-    pending_removal(loop::PollerLoop, name::Symbol) -> Bool
-
-Check whether a poller name is already queued for removal.
-"""
-pending_removal(loop::PollerLoop, name::Symbol) = any(==(name), loop.remove)
-
-"""
-    ensure_unique_name!(loop::PollerLoop, name::Symbol)
-
-Throw if a poller with the given name is already active or queued for addition.
-Names slated for removal are ignored so callers can unregister then register
-within the same cycle.
-"""
-function ensure_unique_name!(loop::PollerLoop, name::Symbol)
-    for config in loop.add
-        if config.name == name
-            throw(ArgumentError("Poller name $(name) already registered"))
-        end
-    end
-
-    if pending_removal(loop, name)
-        return nothing
-    end
-
-    for config in loop.pollers
-        if config.name == name
-            throw(ArgumentError("Poller name $(name) already registered"))
-        end
-    end
-
-    return nothing
-end
-
-"""
-    request_add!(loop::PollerLoop, config::PollerConfig)
+    request_add!(registry::PollerRegistry, config::PollerConfig)
 
 Request to add a poller after the current poll iteration completes.
 Safe to call from within a poller function.
+
+Throws `ArgumentError` if a poller with the same name is already registered or
+queued for addition. Names slated for removal are allowed (supports unregister
+then register in the same cycle).
 """
-function request_add!(loop::PollerLoop, config::PollerConfig)
-    ensure_unique_name!(loop, config.name)
-    push!(loop.add, config)
-    return nothing
+function request_add!(registry::PollerRegistry, config::PollerConfig)
+    # Check for duplicates in pending additions
+    for c in registry.add
+        if c.name === config.name
+            throw(ArgumentError("Poller name $(config.name) already registered"))
+        end
+    end
+
+    # Allow re-registration if name is queued for removal
+    if config.name in registry.remove
+        push!(registry.add, config)
+        return
+    end
+
+    # Check for duplicates in active pollers
+    for c in registry.pollers
+        if c.name === config.name
+            throw(ArgumentError("Poller name $(config.name) already registered"))
+        end
+    end
+
+    push!(registry.add, config)
 end
 
 """
-    request_remove!(loop::PollerLoop, name::Symbol)
+    request_remove!(registry::PollerRegistry, name::Symbol)
 
 Request to remove a poller after the current poll iteration completes.
 Safe to call from within a poller function.
 """
-function request_remove!(loop::PollerLoop, name::Symbol)
+function request_remove!(registry::PollerRegistry, name::Symbol)
     # Cancel pending additions with the same name before queueing removal.
-    for (i, config) in Iterators.reverse(pairs(loop.add))
-        if config.name == name
-            deleteat!(loop.add, i)
-            return nothing
+    for (i, config) in Iterators.reverse(pairs(registry.add))
+        if config.name === name
+            deleteat!(registry.add, i)
+            return
         end
     end
 
-    if pending_removal(loop, name)
-        return nothing
+    if name in registry.remove
+        return
     end
 
-    push!(loop.remove, name)
-    return nothing
+    push!(registry.remove, name)
 end
 
 """
-    apply_poller_changes!(loop::PollerLoop)
+    apply_poller_changes!(registry::PollerRegistry)
 
 Apply pending add/remove operations to the poller list.
 Called internally after each poll iteration.
@@ -185,39 +172,40 @@ Called internally after each poll iteration.
 2. Insert queued pollers into the sorted list using binary search
 3. Clear buffers
 """
-function apply_poller_changes!(loop::PollerLoop)
-    # 1) Remove requested pollers (order-preserving, allocation-free)
-    if !isempty(loop.remove)
-        filter!(loop.pollers) do config
-            # Keep the poller if its name is NOT in the remove list
-            !any(==(config.name), loop.remove)
+function apply_poller_changes!(registry::PollerRegistry)
+    pollers = registry.pollers
+
+    # Remove requested pollers (order-preserving)
+    remove = registry.remove
+    if !isempty(remove)
+        filter!(pollers) do config
+            !(config.name in remove)
         end
-        empty!(loop.remove)
+        empty!(remove)
     end
 
-    # 2) Add new pollers
-    if !isempty(loop.add)
-        for config in loop.add
+    # Add new pollers
+    add = registry.add
+    if !isempty(add)
+        for config in add
             # Preserve FIFO order for identical priorities by inserting after
             # the last poller with the same priority.
-            priorities = [c.priority for c in loop.pollers]
+            priorities = [c.priority for c in pollers]
             insert_at = searchsortedlast(priorities, config.priority)
-            insert!(loop.pollers, insert_at + 1, config)
+            insert!(pollers, insert_at + 1, config)
         end
-        empty!(loop.add)
+        empty!(add)
     end
-
-    return nothing
 end
 
 """
-    poll_pollers!(loop::PollerLoop, agent::AbstractRtcAgent) -> Int
+    poll_pollers!(registry::PollerRegistry, agent::AbstractRtcAgent) -> Int
 
 Execute a single poll cycle across the current poller set and apply any queued
 add/remove operations afterwards.
 """
-@inline function poll_pollers!(loop::PollerLoop, agent::AbstractRtcAgent)
-    pollers = loop.pollers
+@inline function poll_pollers!(registry::PollerRegistry, agent::AbstractRtcAgent)
+    pollers = registry.pollers
     work_count = 0
 
     # Structural changes are deferred via the add/remove buffers.
@@ -225,7 +213,7 @@ add/remove operations afterwards.
         work_count += pollers[i].poll_fn(agent)
     end
 
-    apply_poller_changes!(loop)
+    apply_poller_changes!(registry)
     return work_count
 end
 
@@ -234,7 +222,41 @@ end
 # =============================================================================
 
 """
-    register_poller!(poll_fn, agent::AbstractRtcAgent, priority::Int; name::Symbol)
+    register_poller!(poll_fn, registry::PollerRegistry, name::Symbol, priority::Int)
+
+Register a poller function directly with a PollerRegistry at the specified priority level.
+Lower priority values are polled first (0 = highest priority).
+
+Pollers with the same priority execute in registration order (FIFO) and each
+poller name must be unique. Attempting to register a duplicate name throws an
+`ArgumentError`.
+
+**Note**: Registration is deferred and applied after the current poll cycle completes.
+This makes it safe to register pollers from within other pollers.
+
+# Arguments
+- `poll_fn`: Function with signature `(agent::AbstractRtcAgent) -> Int`
+- `registry`: The PollerRegistry to register with
+- `name`: Required identifier for the poller
+- `priority`: Priority level as Int (built-in pollers use 10, 50, 75, 200)
+
+# Examples
+```julia
+registry = PollerRegistry()
+register_poller!(my_poll_fn, registry, :custom_sensor, 25)
+```
+"""
+function register_poller!(poll_fn, registry::PollerRegistry, name::Symbol, priority::Int)
+    # Wrap function for type stability
+    wrapped_fn = PollerFunction(poll_fn)
+    config = PollerConfig(wrapped_fn, priority, name)
+
+    # Defer the add operation
+    request_add!(registry, config)
+end
+
+"""
+    register_poller!(poll_fn, agent::AbstractRtcAgent, name::Symbol, priority::Int)
 
 Register a poller function with the agent at the specified priority level.
 Lower priority values are polled first (0 = highest priority).
@@ -249,50 +271,69 @@ This makes it safe to register pollers from within other pollers.
 # Arguments
 - `poll_fn`: Function with signature `(agent::AbstractRtcAgent) -> Int`
 - `agent`: The agent to register with
-- `priority`: Priority level as Int (built-in pollers use 10, 50, 75, 200)
 - `name`: Required identifier for the poller
+- `priority`: Priority level as Int (built-in pollers use 10, 50, 75, 200)
 
 # Examples
 ```julia
 # Register a custom poller with high priority (between input=10 and property=50)
-register_poller!(my_custom_poll_fn, agent, 25, name=:custom_sensor)
+register_poller!(my_custom_poll_fn, agent, :custom_sensor, 25)
 
 # Register with inline function at normal priority
-register_poller!(agent, 100, name=:my_poller) do agent
+register_poller!(agent, :my_poller, 100) do agent
     # Poll logic here
     return work_count
 end
 
 # Register multiple pollers at same priority (execute in registration order)
-register_poller!(poll_a, agent, 100, name=:poller_a)  # Runs first
-register_poller!(poll_b, agent, 100, name=:poller_b)  # Runs second
+register_poller!(poll_a, agent, :poller_a, 100)  # Runs first
+register_poller!(poll_b, agent, :poller_b, 100)  # Runs second
 ```
 """
-function register_poller!(poll_fn, agent::AbstractRtcAgent, priority::Int; name::Symbol)
-    b = base(agent)
-    loop = b.poller_loop
-
-    # Wrap function for type stability
-    wrapped_fn = PollerFunction(poll_fn)
-    config = PollerConfig(wrapped_fn, priority, name)
-
-    # Defer the add operation
-    request_add!(loop, config)
-
-    return nothing
+function register_poller!(poll_fn, agent::AbstractRtcAgent, name::Symbol, priority::Int)
+    register_poller!(poll_fn, base(agent).poller_registry, name, priority)
 end
 
 """
-    unregister_poller!(agent::AbstractRtcAgent, name::Symbol) -> Bool
+    unregister_poller!(registry::PollerRegistry, name::Symbol)
 
-Unregister a poller by name.
+Unregister a poller by name from a PollerRegistry.
 
 **Note**: Removal is deferred and applied after the current poll cycle completes.
 This makes it safe to unregister pollers from within other pollers.
 
-# Returns
-`true` if a poller with the given name was found (will be removed after current cycle),
-`false` otherwise.
+If the poller is not found, this function does nothing (idempotent).
+
+# Examples
+```julia
+unregister_poller!(registry, :my_custom_poller)
+```
+"""
+function unregister_poller!(registry::PollerRegistry, name::Symbol)
+    # Cancel any pending addition first
+    for (i, config) in Iterators.reverse(pairs(registry.add))
+        if config.name === name
+            deleteat!(registry.add, i)
+            return
+        end
+    end
+
+    if findfirst(c -> c.name === name, registry.pollers) !== nothing
+        request_remove!(registry, name)
+    end
+    
+    return
+end
+
+"""
+    unregister_poller!(agent::AbstractRtcAgent, name::Symbol)
+
+Unregister a poller by name from an agent.
+
+**Note**: Removal is deferred and applied after the current poll cycle completes.
+This makes it safe to unregister pollers from within other pollers.
+
+If the poller is not found, this function does nothing (idempotent).
 
 # Examples
 ```julia
@@ -300,25 +341,24 @@ unregister_poller!(agent, :my_custom_poller)
 ```
 """
 function unregister_poller!(agent::AbstractRtcAgent, name::Symbol)
-    b = base(agent)
-    loop = b.poller_loop
+    unregister_poller!(base(agent).poller_registry, name)
+end
 
-    # Cancel any pending addition first
-    for i in length(loop.add):-1:1
-        if loop.add[i].name == name
-            deleteat!(loop.add, i)
-            return true
-        end
-    end
+"""
+    clear_pollers!(registry::PollerRegistry) -> Int
 
-    idx = findfirst(c -> c.name == name, loop.pollers)
+Remove all pollers from a PollerRegistry immediately.
 
-    if idx !== nothing
-        request_remove!(loop, name)
-        return true
-    end
+**Note**: Unlike register/unregister, this operation is immediate.
 
-    return false
+# Returns
+The number of pollers that were removed.
+"""
+function clear_pollers!(registry::PollerRegistry)
+    count = length(registry)
+    empty!(registry)
+
+    return count
 end
 
 """
@@ -333,19 +373,13 @@ Remove all pollers from the agent immediately (including built-in pollers).
 The number of pollers that were removed.
 """
 function clear_pollers!(agent::AbstractRtcAgent)
-    b = base(agent)
-    loop = b.poller_loop
-
-    count = length(loop)
-    empty!(loop)
-
-    return count
+    clear_pollers!(base(agent).poller_registry)
 end
 
 """
-    pollers(agent::AbstractRtcAgent) -> PollerLoop
+    pollers(agent::AbstractRtcAgent) -> PollerRegistry
 
-Get the poller collection for the agent. The returned PollerLoop implements the
+Get the poller registry for the agent. The returned PollerRegistry implements the
 Julia collections interface, allowing iteration, length queries, membership tests, etc.
 
 # Examples
@@ -364,7 +398,7 @@ isempty(pollers(agent))
 first_poller = pollers(agent)[1]
 ```
 """
-pollers(agent::AbstractRtcAgent) = base(agent).poller_loop
+pollers(agent::AbstractRtcAgent) = base(agent).poller_registry
 
 """
     Base.in(name::Symbol, agent::AbstractRtcAgent) -> Bool
@@ -379,5 +413,5 @@ end
 ```
 """
 function Base.in(name::Symbol, agent::AbstractRtcAgent)
-    return name in base(agent).poller_loop
+    return name in base(agent).poller_registry
 end

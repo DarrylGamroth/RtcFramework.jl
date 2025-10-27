@@ -7,6 +7,12 @@
     Hsm.transition!(sm, :Stopped)
 end
 
+@on_entry function (sm::AbstractRtcAgent, ::Ready)
+end
+
+@on_exit function (sm::AbstractRtcAgent, ::Ready)
+end
+
 @on_event function (sm::AbstractRtcAgent, ::Ready, ::Reset, _)
     Hsm.transition!(sm, :Ready)
 end

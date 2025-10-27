@@ -14,17 +14,20 @@ function test_pollers(client)
         Agent.on_start(agent)
 
         @testset "Built-in pollers registered on start" begin
-            loop = pollers(agent)
-            @test length(loop) == 4
+            # Apply deferred registrations from on_start
+            Agent.do_work(agent)
 
-            # Check that all built-in pollers are registered
-            @test :input_streams in loop
-            @test :properties in loop
-            @test :timers in loop
-            @test :control_stream in loop
+            registry = pollers(agent)
+            # Only 2 unconditional pollers (timers and control) registered in on_start
+            # Input and property pollers are registered during state transitions
+            @test length(registry) == 2
+
+            # Check that unconditional built-in pollers are registered
+            @test :timers in registry
+            @test :control_stream in registry
 
             # Verify priority order (lower number = higher priority)
-            priorities = [p.priority for p in loop]
+            priorities = [p.priority for p in registry]
             @test issorted(priorities)
         end
 
@@ -37,15 +40,15 @@ function test_pollers(client)
             end
 
             # Register custom poller
-            register_poller!(test_poller, agent, 100; name=:test_poller)
+            register_poller!(test_poller, agent, :test_poller, 100)
 
-            # Apply deferred registration
+            # Apply all registrations
             Agent.do_work(agent)
 
             # Verify it was added
-            loop = pollers(agent)
-            @test length(loop) == 5
-            @test :test_poller in loop
+            registry = pollers(agent)
+            @test length(registry) == 3  # 2 built-in + 1 custom
+            @test :test_poller in registry
 
             # Verify work is executed
             Agent.do_work(agent)
@@ -66,8 +69,8 @@ function test_pollers(client)
             end
 
             # Register both at same priority
-            register_poller!(poller_a, agent, 150; name=:poller_a)
-            register_poller!(poller_b, agent, 150; name=:poller_b)
+            register_poller!(poller_a, agent, :poller_a, 150)
+            register_poller!(poller_b, agent, :poller_b, 150)
 
             # Apply registrations
             Agent.do_work(agent)
@@ -86,7 +89,7 @@ function test_pollers(client)
         @testset "Do-block syntax" begin
             do_block_called = Ref(false)
 
-            register_poller!(agent, 200; name=:do_block_poller) do agent
+            register_poller!(agent, :do_block_poller, 200) do agent
                 do_block_called[] = true
                 return 1
             end
@@ -119,22 +122,22 @@ function test_pollers(client)
             execution_order = Int[]
 
             # Register pollers with different priorities
-            register_poller!(agent, 5; name=:highest) do agent
+            register_poller!(agent, :highest, 5) do agent
                 push!(execution_order, 5)
                 return 0
             end
 
-            register_poller!(agent, 100; name=:medium) do agent
+            register_poller!(agent, :medium, 100) do agent
                 push!(execution_order, 100)
                 return 0
             end
 
-            register_poller!(agent, 20; name=:high) do agent
+            register_poller!(agent, :high, 20) do agent
                 push!(execution_order, 20)
                 return 0
             end
 
-            register_poller!(agent, 500; name=:lowest) do agent
+            register_poller!(agent, :lowest, 500) do agent
                 push!(execution_order, 500)
                 return 0
             end
@@ -155,15 +158,15 @@ function test_pollers(client)
 
         @testset "Work count accumulation" begin
             # Register pollers that return specific work counts
-            register_poller!(agent, 300; name=:work_5) do agent
+            register_poller!(agent, :work_5, 300) do agent
                 return 5
             end
 
-            register_poller!(agent, 301; name=:work_3) do agent
+            register_poller!(agent, :work_3, 301) do agent
                 return 3
             end
 
-            register_poller!(agent, 302; name=:work_7) do agent
+            register_poller!(agent, :work_7, 302) do agent
                 return 7
             end
 
@@ -189,7 +192,7 @@ function test_pollers(client)
 
         @testset "Unregister poller by name" begin
             # Register a test poller
-            register_poller!(agent, 400; name=:to_remove) do agent
+            register_poller!(agent, :to_remove, 400) do agent
                 return 1
             end
 
@@ -199,8 +202,7 @@ function test_pollers(client)
             initial_count = length(pollers(agent))
 
             # Unregister it (deferred)
-            result = unregister_poller!(agent, :to_remove)
-            @test result == true
+            unregister_poller!(agent, :to_remove)
 
             # Apply unregistration
             Agent.do_work(agent)
@@ -209,15 +211,16 @@ function test_pollers(client)
             # Verify it's gone
             @test !(:to_remove in agent)
 
-            # Try to unregister non-existent poller
-            result = unregister_poller!(agent, :nonexistent)
-            @test result == false
+            # Unregister non-existent poller (should be idempotent, no error)
+            unregister_poller!(agent, :nonexistent)
+            # Should still work fine
+            @test length(pollers(agent)) == initial_count - 1
         end
 
         @testset "Clear all pollers" begin
             # Register some custom pollers
-            register_poller!(agent, 100; name=:custom1) do agent; return 0; end
-            register_poller!(agent, 200; name=:custom2) do agent; return 0; end
+            register_poller!(agent, :custom1, 100) do agent; return 0; end
+            register_poller!(agent, :custom2, 200) do agent; return 0; end
 
             # Apply registrations
             Agent.do_work(agent)
@@ -233,18 +236,18 @@ function test_pollers(client)
 
         @testset "List pollers" begin
             # Add a couple of test pollers to verify structure
-            register_poller!(agent, 100; name=:list_test1) do agent; return 0; end
-            register_poller!(agent, 200; name=:list_test2) do agent; return 0; end
+            register_poller!(agent, :list_test1, 100) do agent; return 0; end
+            register_poller!(agent, :list_test2, 200) do agent; return 0; end
             Agent.do_work(agent)
 
-            loop = pollers(agent)
+            registry = pollers(agent)
 
             # Verify structure of returned data
-            @test loop isa RtcFramework.PollerLoop
-            @test length(loop) >= 2  # At least our 2 test pollers
+            @test registry isa RtcFramework.PollerRegistry
+            @test length(registry) >= 2  # At least our 2 test pollers
 
             # Verify iteration
-            for (idx, poller) in enumerate(loop)
+            for (idx, poller) in enumerate(registry)
                 @test poller isa RtcFramework.PollerConfig
                 @test poller.name isa Symbol
                 @test poller.priority isa Int
@@ -253,23 +256,23 @@ function test_pollers(client)
 
         @testset "Reordering pollers" begin
             # Register pollers with specific priorities
-            register_poller!(agent, 50; name=:test_a) do agent; return 0; end
-            register_poller!(agent, 100; name=:test_b) do agent; return 0; end
+            register_poller!(agent, :test_a, 50) do agent; return 0; end
+            register_poller!(agent, :test_b, 100) do agent; return 0; end
             Agent.do_work(agent)
 
             # Unregister and re-register with different priority
             unregister_poller!(agent, :test_b)
-            register_poller!(agent, 25; name=:test_b) do agent; return 0; end
+            register_poller!(agent, :test_b, 25) do agent; return 0; end
 
             # Apply changes
             Agent.do_work(agent)
 
-            loop = pollers(agent)
-            test_b = findfirst(p -> p.name == :test_b, loop)
-            @test loop[test_b].priority == 25
+            registry = pollers(agent)
+            test_b = findfirst(p -> p.name == :test_b, registry)
+            @test registry[test_b].priority == 25
 
             # Verify still in sorted order
-            priorities = [p.priority for p in loop]
+            priorities = [p.priority for p in registry]
             @test issorted(priorities)
         end
 
@@ -287,7 +290,7 @@ function test_pollers(client)
 
         @testset "do_work is type-stable" begin
             # Register a custom poller
-            register_poller!(agent, 100; name=:type_test) do agent
+            register_poller!(agent, :type_test, 100) do agent
                 return 42
             end
 
@@ -321,15 +324,20 @@ function test_pollers(client)
             # Before on_start, no pollers
             @test isempty(pollers(agent))
 
-            # After on_start, built-in pollers registered
+            # After on_start, built-in pollers registered (but deferred)
             Agent.on_start(agent)
-            loop = pollers(agent)
-            @test length(loop) == 4
 
-            # Verify expected priorities
-            poller_map = Dict(p.name => p.priority for p in loop)
-            @test poller_map[:input_streams] < poller_map[:properties]
-            @test poller_map[:properties] < poller_map[:timers]
+            # Apply deferred registrations
+            Agent.do_work(agent)
+
+            registry = pollers(agent)
+            # Only 2 unconditional pollers from on_start
+            # Input poller registered during :Processing entry
+            # Property poller registered during :Playing entry
+            @test length(registry) == 2
+
+            # Verify expected priorities for unconditional pollers
+            poller_map = Dict(p.name => p.priority for p in registry)
             @test poller_map[:timers] < poller_map[:control_stream]
         end
 
@@ -337,6 +345,7 @@ function test_pollers(client)
             # Close from previous testset, then restart
             Agent.on_close(agent)
             Agent.on_start(agent)
+            Agent.do_work(agent)  # Apply deferred registrations
             @test !isempty(pollers(agent))
 
             Agent.on_close(agent)
@@ -346,21 +355,22 @@ function test_pollers(client)
         @testset "Custom pollers interleave with built-ins" begin
             # Restart after previous close
             Agent.on_start(agent)
+            Agent.do_work(agent)  # Apply built-in pollers
 
-            # Add custom poller between input and property
-            register_poller!(agent, 30; name=:between_input_property) do agent
+            # Add custom poller between timer and control
+            register_poller!(agent, :between_timer_control, 100) do agent
                 return 0
             end
 
             # Apply registration
             Agent.do_work(agent)
 
-            loop = pollers(agent)
-            positions = Dict(p.name => idx for (idx, p) in enumerate(loop))
+            registry = pollers(agent)
+            positions = Dict(p.name => idx for (idx, p) in enumerate(registry))
 
-            # Verify ordering
-            @test positions[:input_streams] < positions[:between_input_property]
-            @test positions[:between_input_property] < positions[:properties]
+            # Verify ordering (timers < custom < control)
+            @test positions[:timers] < positions[:between_timer_control]
+            @test positions[:between_timer_control] < positions[:control_stream]
         end
 
         Agent.on_close(agent)

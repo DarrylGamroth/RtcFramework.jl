@@ -21,7 +21,7 @@ function decode_property_value(message, ::Type{A}) where {T,N,A<:AbstractArray{T
     if message_sbe_type != prop_sbe_type
         throw(ErrorException("Property type mismatch for $event: expected $prop_sbe_type, got $message_sbe_type"))
     end
-    
+
     SpidersMessageCodecs.decode(tensor_message, A)
 end
 
@@ -45,29 +45,24 @@ end
 """
     set_property_value!(properties, event, value, ::Type{T}) where {T<:AbstractArray}
 
-Set an array property value with collection to ensure ownership.
+Set an array property value with copy semantics.
 
 Collects the array value to avoid aliasing issues with message buffers.
 """
-function set_property_value!(properties::AbstractStaticKV, event, value, ::Type{T}) where {T<:AbstractArray}
-    # If the property is an array, we need to collect it
-    # TODO: It would be better to copy the contents instead of collecting
-    # to avoid unnecessary allocations
-    setindex!(properties, collect(value), event)
+function set_property_value!(properties::AbstractStaticKV, event::Symbol, value, ::Type{T}) where {T<:AbstractArray}
+    # If the property is an array, we need to copy it
+    setindex!(properties, copy(value), event)
 end
 
 """
     set_property_value!(properties, event, value, ::Type{T}) where {T<:AbstractString}
 
-Set a string property value with collection to ensure ownership.
+Set a string property value with copy semantics.
 
 Collects the string value to avoid aliasing with message buffer data.
 """
-function set_property_value!(properties::AbstractStaticKV, event, value, ::Type{T}) where {T<:AbstractString}
-    # If the property is a string, we need to collect it
-    # TODO: It would be better to copy the contents instead of collecting
-    # to avoid unnecessary allocations
-    setindex!(properties, collect(value), event)
+function set_property_value!(properties::AbstractStaticKV, event::Symbol, value, ::Type{T}) where {T<:AbstractString}
+    setindex!(properties, String(value), event)
 end
 
 """
@@ -78,7 +73,7 @@ Set a scalar property value directly without copying.
 Generic fallback for bits types that can be stored directly.
 """
 # Generic fallback for all other types (bits types, etc.)
-function set_property_value!(properties::AbstractStaticKV, event, value, ::Type{T}) where {T}
+function set_property_value!(properties::AbstractStaticKV, event::Symbol, value, ::Type{T}) where {T}
     setindex!(properties, value, event)
 end
 
@@ -90,7 +85,7 @@ Handle a property write request by decoding and storing the new value.
 Decodes the property value from the message, updates the property store,
 and publishes a status event confirming the change.
 """
-function on_property_write(sm::AbstractRtcAgent, event, message)
+function on_property_write(sm::AbstractRtcAgent, event::Symbol, message)
     b = base(sm)
     prop_type = valtype(b.properties, event)
     value = decode_property_value(message, prop_type)
@@ -106,7 +101,7 @@ Handle a property read request by publishing the current value.
 
 Checks if the property exists and publishes its current value as a status event.
 """
-function on_property_read(sm::AbstractRtcAgent, event, _)
+function on_property_read(sm::AbstractRtcAgent, event::Symbol, _)
     b = base(sm)
     if isset(b.properties, event)
         value = b.properties[event]

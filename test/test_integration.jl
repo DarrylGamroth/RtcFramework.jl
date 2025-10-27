@@ -76,6 +76,7 @@ function test_integration(client)
         # Measure allocation-free processing
         # First run to warm up
         Agent.do_work(agent)
+        Agent.do_work(agent)
         
         # Actual measurement
         allocations = @allocated Agent.do_work(agent)

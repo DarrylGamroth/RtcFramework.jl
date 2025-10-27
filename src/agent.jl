@@ -24,7 +24,7 @@ transitions. Generic parameters allow customization of core components.
 - `control_adapter::Union{Nothing,ControlStreamAdapter}`: control message handler
 - `input_adapters::Vector{InputStreamAdapter}`: input stream processors
 - `property_registry::Vector{PublicationConfig}`: registered property configs
-- `poller_loop::PollerLoop`: poller management with deferred add/remove
+- `poller_registry::PollerRegistry`: poller management with deferred add/remove
 - `counters::Counters`: Aeron-allocated performance counters for external observability
 - `last_stats_time::Int64`: timestamp of last stats update (nanoseconds)
 - `last_msg_count::Int64`: message count at last stats update (for rate calculation)
@@ -42,7 +42,7 @@ mutable struct BaseRtcAgent{C<:AbstractClock,P<:AbstractStaticKV,ID<:SnowflakeId
     control_adapter::Union{Nothing,ControlStreamAdapter}
     input_adapters::Vector{InputStreamAdapter}
     property_registry::Vector{PublicationConfig}
-    poller_loop::PollerLoop
+    poller_registry::PollerRegistry
     counters::Counters
     last_stats_time::Int64
     last_msg_count::Int64
@@ -73,7 +73,7 @@ function BaseRtcAgent(comms::CommunicationResources, properties::AbstractStaticK
         nothing,
         InputStreamAdapter[],
         PublicationConfig[],
-        PollerLoop(),
+        PollerRegistry(),
         counters,
         0,
         0,
@@ -124,8 +124,13 @@ function Agent.on_start(agent::AbstractRtcAgent)
         throw(AgentCommunicationError("Failed to initialize communication resources: $(e)"))
     end
 
-    # Register built-in pollers
-    register_builtin_pollers!(agent)
+    # Register pollers
+
+    # Timer events
+    register_poller!(timer_poller, agent, :timers, PRIORITY_TIMER)
+
+    # Control stream polling (lowest priority of built-ins)
+    register_poller!(control_poller, agent, :control_stream, PRIORITY_CONTROL)
 
     nothing
 end
@@ -183,42 +188,13 @@ function Agent.do_work(agent::AbstractRtcAgent)
     b = base(agent)
     fetch!(b.clock)
 
-    work_count = poll_pollers!(b.poller_loop, agent)
+    work_count = poll_pollers!(b.poller_registry, agent)
 
     counters = b.counters
     increment_counter!(counters, TOTAL_DUTY_CYCLES)
     increment_counter!(counters, TOTAL_WORK_DONE, work_count)
 
     return work_count
-end
-
-# =============================================================================
-# Built-in Poller Registration
-# =============================================================================
-
-"""
-    register_builtin_pollers!(agent::AbstractRtcAgent)
-
-Register the framework's built-in pollers in priority order.
-
-This is called automatically during `on_start`. Users can override priorities
-by unregistering and re-registering with different priorities if needed.
-"""
-function register_builtin_pollers!(agent::AbstractRtcAgent)
-    # Input stream polling (highest priority)
-    register_poller!(input_poller, agent, PRIORITY_INPUT; name=:input_streams)
-
-    # Property publishing
-    register_poller!(property_poller, agent, PRIORITY_PROPERTY; name=:properties)
-
-    # Timer events
-    register_poller!(timer_poller, agent, PRIORITY_TIMER; name=:timers)
-
-    # Control stream polling (lowest priority of built-ins)
-    register_poller!(control_poller, agent, PRIORITY_CONTROL; name=:control_stream)
-
-    # Apply all builtin registrations in one batch
-    apply_poller_changes!(base(agent).poller_loop)
 end
 
 # =============================================================================

@@ -92,6 +92,6 @@ function publish_property(agent::AbstractRtcAgent, config::PublicationConfig)
     timestamp = time_nanos(b.clock)
     proxy = b.property_proxy::PropertyProxy
 
-    publish_property(proxy, config.stream_index, config.field, 
+    publish_property(proxy, config.stream_index, config.field,
         b.properties[config.field], b.properties[:Name], b.source_correlation_id, timestamp)
 end

@@ -20,7 +20,7 @@ using Logging
 
 @kvstore Properties begin
     @base_properties
-    
+
     # Add your custom properties
     SensorData::Vector{Float32} => zeros(Float32, 100)
     TargetPosition::Float64 => 0.0
@@ -80,14 +80,14 @@ MediaDriver.launch_embedded() do driver
             # Create clock and properties
             clock = CachedEpochClock(EpochClock())
             properties = Properties(clock)
-            
+
             # Create communication resources
             comms = CommunicationResources(client, properties)
-            
+
             # Create base agent and wrap it
             base_agent = BaseRtcAgent(comms, properties, clock)
             agent = MyAgent(base_agent)
-            
+
             # Start the agent
             runner = AgentRunner(BackoffIdleStrategy(), agent)
             Agent.start_on_thread(runner)
@@ -171,7 +171,7 @@ For advanced cases like publishing composite data (e.g., camera frames with meta
         frame = b.properties[:FrameData]
         offset_x = b.properties[:OffsetX]
         offset_y = b.properties[:OffsetY]
-        
+
         # Your custom publishing logic here
         publish_frame_with_metadata(agent, config.stream_index, frame, offset_x, offset_y)
     else
@@ -220,7 +220,7 @@ The framework includes a unified poller system that executes work in priority or
 # Register a custom poller with priority
 # Lower priority numbers = higher priority (runs first)
 # Built-in priorities: input=10, property=50, timer=75, control=200
-register_poller!(agent, 25, name=:custom_sensor) do agent
+register_poller!(agent, :custom_sensor, 25) do agent
     # Your polling logic here
     work_count = poll_custom_sensor(agent)
     return work_count  # Must return Int
@@ -236,7 +236,7 @@ function my_custom_poller(agent::AbstractRtcAgent)
     end
     return work_done
 end
-register_poller!(my_custom_poller, agent, 100, name=:my_poller)
+register_poller!(my_custom_poller, agent, :my_poller, 100)
 
 # Manage pollers
 unregister_poller!(agent, :my_poller)           # Remove specific poller
@@ -334,16 +334,14 @@ end
 # Handle event in any state (use Top)
 @on_event function (agent::MyAgent, ::Top, ::EmergencyStop, _)
     @warn "Emergency stop requested"
-    return transition!(agent, Stopped)
+    return Hsm.transition!(agent, :Stopped)
 end
 ```
 
 **Important Notes:**
-- Event handlers in child states take precedence over parent states
-- Return `Hsm.EventHandled` if event is processed, `Hsm.EventIgnored` to bubble up to parent
-- Use `transition!(agent, NewState)` to trigger state changes
-- State transitions trigger `on_exit` for old state and `on_entry` for new state
-- See [Hsm.jl documentation](https://github.com/erwanlem/Hsm.jl) for more details on state machine patterns
+- Return `Hsm.EventHandled` if event is processed, `Hsm.EventNotHandled` to delegate to parent
+- Use `Hsm.transition!(agent, :NewState)` to trigger state changes
+- See [Hsm.jl documentation](https://github.com/DarrylGamroth/Hsm.jl) for more details on state machine patterns
 
 ### Event Dispatch
 
