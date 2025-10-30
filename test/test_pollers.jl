@@ -18,9 +18,7 @@ function test_pollers(client)
             Agent.do_work(agent)
 
             registry = pollers(agent)
-            # Only 2 unconditional pollers (timers and control) registered in on_start
-            # Input and property pollers are registered during state transitions
-            @test length(registry) == 2
+            @test length(registry) == 4
 
             # Check that unconditional built-in pollers are registered
             @test :timers in registry
@@ -47,7 +45,7 @@ function test_pollers(client)
 
             # Verify it was added
             registry = pollers(agent)
-            @test length(registry) == 3  # 2 built-in + 1 custom
+            @test length(registry) == 5  # 4 built-in + 1 custom
             @test :test_poller in registry
 
             # Verify work is executed
@@ -331,10 +329,8 @@ function test_pollers(client)
             Agent.do_work(agent)
 
             registry = pollers(agent)
-            # Only 2 unconditional pollers from on_start
-            # Input poller registered during :Processing entry
-            # Property poller registered during :Playing entry
-            @test length(registry) == 2
+
+            @test length(registry) == 4
 
             # Verify expected priorities for unconditional pollers
             poller_map = Dict(p.name => p.priority for p in registry)

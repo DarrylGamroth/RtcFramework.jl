@@ -4,11 +4,9 @@
 @statedef AbstractRtcAgent :Playing :Processing
 
 @on_entry function (sm::AbstractRtcAgent, ::Playing)
-    register_poller!(property_poller, sm, :properties, PRIORITY_PROPERTY)
 end
 
 @on_exit function (sm::AbstractRtcAgent, ::Playing)
-    unregister_poller!(sm, :properties)
 end
 
 @on_event function (sm::AbstractRtcAgent, ::Playing, ::Pause, _)

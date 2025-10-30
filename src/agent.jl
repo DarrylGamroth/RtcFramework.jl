@@ -126,6 +126,12 @@ function Agent.on_start(agent::AbstractRtcAgent)
 
     # Register pollers
 
+    # Input stream polling
+    register_poller!(input_poller, agent, :input_streams, PRIORITY_INPUT)
+
+    # Property publishing
+    register_poller!(property_poller, agent, :properties, PRIORITY_PROPERTY)
+
     # Timer events
     register_poller!(timer_poller, agent, :timers, PRIORITY_TIMER)
 
