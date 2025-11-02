@@ -111,9 +111,6 @@ function _precompile_rtcframework()
     precompile(Tuple{typeof(publish_property),PropertyProxy,Int,Symbol,Matrix{Float32},String,Int64,Int64})
     precompile(Tuple{typeof(publish_property),PropertyProxy,Int,Symbol,Matrix{Float64},String,Int64,Int64})
 
-    # PropertyProxy with strategy evaluation
-    precompile(Tuple{typeof(publish_property_update),PropertyProxy,PublicationConfig,PropertiesType,String,Int64,Int64})
-
     # =============================================================================
     # Aeron Communication Primitives
     # =============================================================================
@@ -235,6 +232,12 @@ function _precompile_rtcframework()
 
     # FunctionWrapper construction for pollers
     precompile(Tuple{Type{FunctionWrapper{Int,Tuple{AbstractRtcAgent}}},Function})
+
+    # Internal poller system operations (hot paths)
+    precompile(Tuple{typeof(poll_pollers!),PollerRegistry,AbstractRtcAgent})
+    precompile(Tuple{typeof(apply_poller_changes!),PollerRegistry})
+    precompile(Tuple{typeof(request_add!),PollerRegistry,PollerConfig})
+    precompile(Tuple{typeof(request_remove!),PollerRegistry,Symbol})
 
     # =============================================================================
     # Message Handlers and Pollers

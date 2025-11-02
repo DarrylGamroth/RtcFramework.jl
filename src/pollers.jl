@@ -89,7 +89,6 @@ function Base.empty!(registry::PollerRegistry)
     empty!(registry.add)
     empty!(registry.remove)
     empty!(registry.pollers)
-    return registry
 end
 
 # Membership test - check if poller name exists
@@ -208,9 +207,8 @@ add/remove operations afterwards.
     pollers = registry.pollers
     work_count = 0
 
-    # Structural changes are deferred via the add/remove buffers.
-    @inbounds for i in 1:length(pollers)
-        work_count += pollers[i].poll_fn(agent)
+    for p in pollers
+        work_count += p.poll_fn(agent)
     end
 
     apply_poller_changes!(registry)
@@ -321,8 +319,6 @@ function unregister_poller!(registry::PollerRegistry, name::Symbol)
     if findfirst(c -> c.name === name, registry.pollers) !== nothing
         request_remove!(registry, name)
     end
-    
-    return
 end
 
 """

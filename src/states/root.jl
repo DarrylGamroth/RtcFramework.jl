@@ -1,7 +1,10 @@
 # Root state handlers
-# Handles default property operations and common state behaviors
 
 # Root state is implicitly defined by the HSM framework
+
+@on_initial function (sm::AbstractRtcAgent, ::Root)
+    Hsm.transition!(sm, :Startup)
+end
 
 @on_event function (sm::AbstractRtcAgent, state::Root, event::Any, message::EventMessage)
     @info "Default handler called with event: $(event)"
@@ -18,8 +21,4 @@
 
     # Defer to the ancestor handler
     return Hsm.EventNotHandled
-end
-
-@on_initial function (sm::AbstractRtcAgent, ::Root)
-    Hsm.transition!(sm, :Top)
 end

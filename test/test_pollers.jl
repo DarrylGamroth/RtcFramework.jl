@@ -337,19 +337,28 @@ function test_pollers(client)
             @test poller_map[:timers] < poller_map[:control_stream]
         end
 
-        @testset "Built-in pollers cleared on close" begin
-            # Close from previous testset, then restart
+        @testset "Built-in pollers cleared on exit" begin
+            # Close via HSM from previous setup, then restart
+            @test_throws AgentTerminationException dispatch!(agent, :Exit)
             Agent.on_close(agent)
+
+            # Create a new agent AND new comms for restart test (can't reuse closed publications)
+            comms2 = CommunicationResources(client, properties)
+            agent = TestAgent.RtcAgent(BaseRtcAgent(comms2, properties, clock))
             Agent.on_start(agent)
             Agent.do_work(agent)  # Apply deferred registrations
             @test !isempty(pollers(agent))
 
-            Agent.on_close(agent)
+            # Cleanup via HSM and then close external resources
+            @test_throws AgentTerminationException dispatch!(agent, :Exit)
             @test isempty(pollers(agent))
+            Agent.on_close(agent)
         end
 
         @testset "Custom pollers interleave with built-ins" begin
-            # Restart after previous close
+            # Create a new agent AND new comms since previous is in Exit state
+            comms3 = CommunicationResources(client, properties)
+            agent = TestAgent.RtcAgent(BaseRtcAgent(comms3, properties, clock))
             Agent.on_start(agent)
             Agent.do_work(agent)  # Apply built-in pollers
 

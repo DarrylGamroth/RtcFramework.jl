@@ -102,43 +102,7 @@ Creates control and input stream adapters, and status/property proxies.
 function Agent.on_start(agent::AbstractRtcAgent)
     @info "Starting agent $(Agent.name(agent))"
 
-    b = base(agent)
-    try
-        # Create control stream adapter
-        b.control_adapter = ControlStreamAdapter(
-            b.comms.control_stream,
-            agent
-        )
-
-        # Create input stream adapters
-        empty!(b.input_adapters)
-        for input_stream in b.comms.input_streams
-            push!(b.input_adapters, InputStreamAdapter(input_stream, agent))
-        end
-
-        # Create proxy instances
-        b.status_proxy = StatusProxy(b.comms.status_stream)
-        b.property_proxy = PropertyProxy(b.comms.output_streams)
-
-    catch e
-        throw(AgentCommunicationError("Failed to initialize communication resources: $(e)"))
-    end
-
-    # Register pollers
-
-    # Input stream polling
-    register_poller!(input_poller, agent, :input_streams, PRIORITY_INPUT)
-
-    # Property publishing
-    register_poller!(property_poller, agent, :properties, PRIORITY_PROPERTY)
-
-    # Timer events
-    register_poller!(timer_poller, agent, :timers, PRIORITY_TIMER)
-
-    # Control stream polling (lowest priority of built-ins)
-    register_poller!(control_poller, agent, :control_stream, PRIORITY_CONTROL)
-
-    nothing
+    dispatch!(agent, :AgentStarted)
 end
 
 """
@@ -153,23 +117,11 @@ function Agent.on_close(agent::AbstractRtcAgent)
 
     b = base(agent)
 
-    # Cancel all timers
-    cancel!(b.timers)
-
-    # Clear all pollers
-    clear_pollers!(agent)
-
     # Close counters
     close(b.counters)
 
     # Close communication resources
     close(b.comms)
-
-    # Clear adapters and proxies
-    b.control_adapter = nothing
-    b.status_proxy = nothing
-    b.property_proxy = nothing
-    empty!(b.input_adapters)
 end
 
 """
@@ -228,8 +180,8 @@ Returns the number of fragments processed.
 """
 function control_poller(agent::AbstractRtcAgent)
     b = base(agent)
-    adapter = b.control_adapter::ControlStreamAdapter
-    poll(adapter, DEFAULT_CONTROL_FRAGMENT_COUNT_LIMIT)
+    isnothing(b.control_adapter) && return 0
+    poll(b.control_adapter, DEFAULT_CONTROL_FRAGMENT_COUNT_LIMIT)
 end
 
 """
@@ -259,20 +211,16 @@ state, and counts the dispatch. Returns the number of properties that should pub
 function property_poller(agent::AbstractRtcAgent)
     b = base(agent)
     registry = b.property_registry
-
-    if isempty(registry)
-        return 0
-    end
+    isempty(registry) && return 0
 
     now = time_nanos(b.clock)
     count = 0
 
-    @inbounds for i in 1:length(registry)
-        config = registry[i]
+    for config in registry
         property_timestamp_ns = last_update(b.properties, config.field)
 
         if should_publish(config.strategy, config.last_published_ns,
-                         config.next_scheduled_ns, property_timestamp_ns, now)
+            config.next_scheduled_ns, property_timestamp_ns, now)
             b.source_correlation_id = next_id(b.id_gen)
             dispatch!(agent, :PublishProperty, config)
             config.last_published_ns = now

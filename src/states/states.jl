@@ -7,6 +7,7 @@ its own state definitions and event handlers for the agent lifecycle.
 
 # Include all state handler files
 include("root.jl")
+include("startup.jl")
 include("top.jl")
 include("ready.jl")
 include("stopped.jl")

@@ -1,9 +1,10 @@
 # Exit state handlers
-# Handles graceful shutdown and termination
 
-@statedef AbstractRtcAgent :Exit :Top
+@statedef AbstractRtcAgent :Exit
 
-@on_entry function (sm::AbstractRtcAgent, state::Exit)
-    @info "Entering state: $(state)"
+@on_entry function (sm::AbstractRtcAgent, ::Exit)
     throw(AgentTerminationException())
+end
+
+@on_exit function (sm::AbstractRtcAgent, ::Exit)
 end

@@ -1,5 +1,4 @@
 # Paused state handlers
-# Handles events specific to the paused state
 
 @statedef AbstractRtcAgent :Paused :Processing
 

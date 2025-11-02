@@ -173,7 +173,7 @@ function Counters(client::Aeron.Client, agent_id::Int64, agent_name::String)
     # Write agent_name (remaining bytes)
     key_buffer[9:end] .= name_bytes
 
-    @inbounds for metadata in COUNTER_METADATA
+    for metadata in COUNTER_METADATA
         idx = Int(metadata.id)
         # Construct label with agent identification
         label = "$(metadata.label): NodeId=$agent_id Name=$agent_name"
@@ -213,7 +213,6 @@ Performs atomic increment operation with bounds checking elided via @inbounds.
 """
 @inline function increment_counter!(counters::Counters, id::CounterId, delta::Int=1)
     @inbounds increment!(counters.vec[Int(id)], delta)
-    nothing
 end
 
 """
@@ -225,7 +224,6 @@ Uses Aeron's atomic set operation for thread-safe updates.
 """
 @inline function set_counter!(counter::Aeron.Counter, value::Int64)
     counter[] = value
-    nothing
 end
 
 """
@@ -240,5 +238,4 @@ function Base.close(counters::Counters)
     for counter in counters.vec
         close(counter)
     end
-    nothing
 end

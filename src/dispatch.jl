@@ -34,7 +34,6 @@ function dispatch!(agent::AbstractRtcAgent, event::Symbol, message=nothing)
 
     catch e
         if e isa Agent.AgentTerminationException
-            @info "Agent termination requested"
             throw(e)
         else
             Hsm.dispatch!(agent, :Error, (event, e::Exception))

@@ -64,8 +64,6 @@ function unregister!(agent::AbstractRtcAgent, field::Symbol, stream_index::Int)
     indices = findall(config -> config.field == field && config.stream_index == stream_index, b.property_registry)
     deleteat!(b.property_registry, indices)
 
-    @info "Unregistered property: $field on stream $stream_index"
-
     return length(indices)
 end
 
@@ -84,8 +82,6 @@ function unregister!(agent::AbstractRtcAgent, field::Symbol)
     b = base(agent)
     indices = findall(config -> config.field == field, b.property_registry)
     deleteat!(b.property_registry, indices)
-
-    @info "Unregistered property: $field"
 
     return length(indices)
 end

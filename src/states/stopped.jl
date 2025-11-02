@@ -1,5 +1,4 @@
 # Stopped state handlers
-# Handles transitions from stopped to playing state
 
 @statedef AbstractRtcAgent :Stopped :Ready
 

@@ -18,10 +18,6 @@ RtcFramework.base(agent::MyServiceAgent) = agent.base
 """
 function base end
 
-# =============================================================================
-# Convenience Accessors for Service Code
-# =============================================================================
-
 """
     properties(agent::AbstractRtcAgent)
 

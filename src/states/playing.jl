@@ -1,5 +1,4 @@
 # Playing state handlers
-# Handles events specific to the playing state
 
 @statedef AbstractRtcAgent :Playing :Processing
 
