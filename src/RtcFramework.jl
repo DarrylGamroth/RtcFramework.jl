@@ -40,7 +40,7 @@ include("precompile.jl")
 
 # Counter system
 export CounterId, CounterMetadata, COUNTER_METADATA, BASE_COUNTER_TYPE_ID
-export Counters, get_counter, increment_counter!, set_counter!
+export Counters, counter, counter!, increment!
 export TOTAL_DUTY_CYCLES, TOTAL_WORK_DONE, PROPERTIES_PUBLISHED
 
 # Property system

@@ -149,8 +149,8 @@ function Agent.do_work(agent::AbstractRtcAgent)
     work_count = poll_pollers!(b.poller_registry, agent)
 
     counters = b.counters
-    increment_counter!(counters, TOTAL_DUTY_CYCLES)
-    increment_counter!(counters, TOTAL_WORK_DONE, work_count)
+    increment!(counters, TOTAL_DUTY_CYCLES)
+    increment!(counters, TOTAL_WORK_DONE, work_count)
 
     return work_count
 end
@@ -230,7 +230,7 @@ function property_poller(agent::AbstractRtcAgent)
     end
 
     if count > 0
-        increment_counter!(b.counters, PROPERTIES_PUBLISHED, count)
+        increment!(b.counters, PROPERTIES_PUBLISHED, count)
     end
 
     return count

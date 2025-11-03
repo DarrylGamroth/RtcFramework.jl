@@ -345,10 +345,10 @@ function _precompile_rtcframework()
     precompile(Tuple{typeof(Counters),Aeron.Client,Int64,String})
 
     # Counter operations - hot path functions called in do_work
-    precompile(Tuple{typeof(get_counter),Counters,CounterId})
-    precompile(Tuple{typeof(increment_counter!),Counters,CounterId})
-    precompile(Tuple{typeof(increment_counter!),Counters,CounterId,Int})
-    precompile(Tuple{typeof(set_counter!),Aeron.Counter,Int64})
+    precompile(Tuple{typeof(counter),Counters,CounterId})
+    precompile(Tuple{typeof(counter!),Counters,CounterId,Int64})
+    precompile(Tuple{typeof(increment!),Counters,CounterId})
+    precompile(Tuple{typeof(increment!),Counters,CounterId,Int})
 
     # Counter lifecycle
     precompile(Tuple{typeof(Base.close),Counters})

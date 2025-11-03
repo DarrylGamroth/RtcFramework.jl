@@ -61,37 +61,36 @@ function test_counters(client)
         @test !isnothing(counters.vec[Int(PROPERTIES_PUBLISHED)])
 
         # Test initial values are zero
-        @test get_counter(counters, TOTAL_DUTY_CYCLES) == 0
-        @test get_counter(counters, TOTAL_WORK_DONE) == 0
-        @test get_counter(counters, PROPERTIES_PUBLISHED) == 0
+        @test counter(counters, TOTAL_DUTY_CYCLES) == 0
+        @test counter(counters, TOTAL_WORK_DONE) == 0
+        @test counter(counters, PROPERTIES_PUBLISHED) == 0
     end
 
     @testset "Counter operations" begin
         counters = Counters(client, Int64(1), "TestOps")
 
         # Test increment by 1 (default)
-        increment_counter!(counters, TOTAL_DUTY_CYCLES)
-        @test get_counter(counters, TOTAL_DUTY_CYCLES) == 1
+        RtcFramework.increment!(counters, TOTAL_DUTY_CYCLES)
+        @test counter(counters, TOTAL_DUTY_CYCLES) == 1
 
-        increment_counter!(counters, TOTAL_DUTY_CYCLES)
-        @test get_counter(counters, TOTAL_DUTY_CYCLES) == 2
+        RtcFramework.increment!(counters, TOTAL_DUTY_CYCLES)
+        @test counter(counters, TOTAL_DUTY_CYCLES) == 2
 
         # Test increment by delta
-        increment_counter!(counters, TOTAL_WORK_DONE, 10)
-        @test get_counter(counters, TOTAL_WORK_DONE) == 10
+        RtcFramework.increment!(counters, TOTAL_WORK_DONE, 10)
+        @test counter(counters, TOTAL_WORK_DONE) == 10
 
-        increment_counter!(counters, TOTAL_WORK_DONE, 5)
-        @test get_counter(counters, TOTAL_WORK_DONE) == 15
+        RtcFramework.increment!(counters, TOTAL_WORK_DONE, 5)
+        @test counter(counters, TOTAL_WORK_DONE) == 15
 
         # Test set operation
-        counter = counters.vec[Int(PROPERTIES_PUBLISHED)]
-        set_counter!(counter, 100)
-        @test get_counter(counters, PROPERTIES_PUBLISHED) == 100
+        counter!(counters, PROPERTIES_PUBLISHED, 100)
+        @test counter(counters, PROPERTIES_PUBLISHED) == 100
 
         # Test counters are independent
-        @test get_counter(counters, TOTAL_DUTY_CYCLES) == 2
-        @test get_counter(counters, TOTAL_WORK_DONE) == 15
-        @test get_counter(counters, PROPERTIES_PUBLISHED) == 100
+        @test counter(counters, TOTAL_DUTY_CYCLES) == 2
+        @test counter(counters, TOTAL_WORK_DONE) == 15
+        @test counter(counters, PROPERTIES_PUBLISHED) == 100
     end
 
     @testset "Counter key buffer format" begin
@@ -118,13 +117,13 @@ function test_counters(client)
         agent3 = Counters(client, Int64(3), "Agent3")
 
         # Each agent's counters are independent
-        increment_counter!(agent1, TOTAL_DUTY_CYCLES, 10)
-        increment_counter!(agent2, TOTAL_DUTY_CYCLES, 20)
-        increment_counter!(agent3, TOTAL_DUTY_CYCLES, 30)
+        RtcFramework.increment!(agent1, TOTAL_DUTY_CYCLES, 10)
+        RtcFramework.increment!(agent2, TOTAL_DUTY_CYCLES, 20)
+        RtcFramework.increment!(agent3, TOTAL_DUTY_CYCLES, 30)
 
-        @test get_counter(agent1, TOTAL_DUTY_CYCLES) == 10
-        @test get_counter(agent2, TOTAL_DUTY_CYCLES) == 20
-        @test get_counter(agent3, TOTAL_DUTY_CYCLES) == 30
+        @test counter(agent1, TOTAL_DUTY_CYCLES) == 10
+        @test counter(agent2, TOTAL_DUTY_CYCLES) == 20
+        @test counter(agent3, TOTAL_DUTY_CYCLES) == 30
     end
 
     @testset "Counter close" begin

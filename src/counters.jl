@@ -36,8 +36,8 @@ Counters are allocated through Aeron's CountersManager using type_id ≥ 1000
 # Example
 ```julia
 counters = Counters(aeron_client, node_id, agent_name)
-increment_counter!(counters, TOTAL_DUTY_CYCLES)
-count = get_counter(counters, TOTAL_DUTY_CYCLES)
+increment!(counters, TOTAL_DUTY_CYCLES)
+count = counter(counters, TOTAL_DUTY_CYCLES)
 ```
 """
 
@@ -184,7 +184,7 @@ function Counters(client::Aeron.Client, agent_id::Int64, agent_name::String)
 end
 
 """
-    get_counter(counters::Counters, id::CounterId) -> Int64
+    counter(counters::Counters, id::CounterId) -> Int64
 
 Get the current value of the specified counter.
 
@@ -195,12 +195,28 @@ Get the current value of the specified counter.
 # Returns
 Current counter value (atomically loaded)
 """
-@inline function get_counter(counters::Counters, id::CounterId)
+@inline function counter(counters::Counters, id::CounterId)
     @inbounds counters.vec[Int(id)][]
 end
 
 """
-    increment_counter!(counters::Counters, id::CounterId, delta::Int=1)
+    counter!(counters::Counters, id::CounterId, value::Int64)
+
+Set a counter to an explicit value.
+
+Uses Aeron's atomic set operation for thread-safe updates.
+
+# Arguments
+- `counters`: Counters container with allocated Aeron counters
+- `id`: CounterId enum value
+- `value`: New counter value
+"""
+@inline function counter!(counters::Counters, id::CounterId, value::Int64)
+    @inbounds counters.vec[Int(id)][] = value
+end
+
+"""
+    increment!(counters::Counters, id::CounterId, delta::Int=1)
 
 Increment the specified counter by delta (default 1).
 
@@ -211,19 +227,8 @@ Increment the specified counter by delta (default 1).
 
 Performs atomic increment operation with bounds checking elided via @inbounds.
 """
-@inline function increment_counter!(counters::Counters, id::CounterId, delta::Int=1)
-    @inbounds increment!(counters.vec[Int(id)], delta)
-end
-
-"""
-    set_counter!(counter::Aeron.Counter, value::Int64)
-
-Set an Aeron counter to an explicit value.
-
-Uses Aeron's atomic set operation for thread-safe updates.
-"""
-@inline function set_counter!(counter::Aeron.Counter, value::Int64)
-    counter[] = value
+@inline function increment!(counters::Counters, id::CounterId, delta::Int64=1)
+    @inbounds Aeron.increment!(counters.vec[Int(id)], delta)
 end
 
 """
