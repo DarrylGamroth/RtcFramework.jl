@@ -263,36 +263,40 @@ The framework uses a hierarchical state machine (HSM) to manage agent lifecycle 
 #### State Hierarchy
 
 ```
-Root
-└── Top
-    └── Ready (container for operational states)
-        ├── Stopped (initial substate of Ready)
-        └── Processing (superstate for active operation)
-            ├── Playing (active processing)
-            └── Paused (suspended processing)
-    ├── Error (error handling)
-    └── Exit (final state)
+Root (always active)
+├── Startup (initial state, waits for AgentStarted event)
+├── Top (main operational container)
+│   └── Ready (container for normal operations)
+│       ├── Stopped (initial substate of Ready)
+│       └── Processing (superstate for active operation)
+│           ├── Playing (active processing)
+│           └── Paused (suspended processing)
+├── Error (error handling)
+└── Exit (terminal state)
 ```
 
 #### State Descriptions
 
-- **Root**: Top-level state, always active
-- **Top**: Container for all operational states
-- **Ready**: Container state for normal operations, entered after agent creation
-  - **Stopped**: Initial substate, agent initialized but not processing
-  - **Processing**: Superstate for all active processing states
-    - **Playing**: Normal active operation, processing work
-    - **Paused**: Processing suspended but state maintained
-- **Error**: Error state for handling exceptional conditions
-- **Exit**: Terminal state before shutdown
+- **Root**: Top-level state, always active. Handles default property read/write events.
+- **Startup**: Initial state entered on agent creation. Waits for `:AgentStarted` event from `on_start`, then transitions to `:Top`.
+- **Top**: Container for all operational states. Manages adapters, proxies, pollers, and timers.
+- **Ready**: Container state for normal operations, entered when Top state is entered.
+  - **Stopped**: Initial substate of Ready. Agent initialized but not processing.
+  - **Processing**: Superstate for all active processing states.
+    - **Playing**: Normal active operation, processing work.
+    - **Paused**: Processing suspended but state maintained.
+- **Error**: Error state for handling exceptional conditions.
+- **Exit**: Terminal state before shutdown. Throws `AgentTerminationException` on entry.
 
 #### State Transitions
 
 Common state transition flows:
 
 ```julia
-# Agent initialization
-# Ready entered → automatically transitions to Stopped (initial substate)
+# Agent initialization (automatic)
+Root → Startup (on creation)
+Startup → Top (on AgentStarted event from on_start)
+Top → Ready → Stopped (automatic initial transitions)
 
 # Normal startup
 Stopped → Playing
@@ -307,7 +311,7 @@ Playing → Stopped → Playing
 Playing → Error → Stopped  # or → Playing (if recoverable)
 
 # Shutdown
-Playing → Exit
+Playing → Exit  # Throws AgentTerminationException
 ```
 
 #### Implementing Event Handlers
