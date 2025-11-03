@@ -1,30 +1,55 @@
 """
     RtcFramework Counter System
 
-Minimal performance counter system using Aeron's native counter allocation for
-external observability via AeronStat. Counters are allocated in the MediaDriver's
+Minimal, extensible performance counter system using Aeron's native counter allocation
+for external observability via AeronStat. Counters are allocated in the MediaDriver's
 shared memory and can be monitored by external tools.
-
-# Counter Types
-- `TOTAL_DUTY_CYCLES`: Total duty cycles executed (work loop health)
-- `TOTAL_WORK_DONE`: Cumulative work units processed (throughput)
-- `PROPERTIES_PUBLISHED`: Total property publications (property system activity)
 
 # Design Philosophy
 This minimal set tracks application-level metrics that are not provided by Aeron's
 native per-stream counters. For transport-level metrics (bytes, messages, backpressure),
 use Aeron's subscription/publication counters directly.
 
+# RtcFramework Standard Counters
+The framework provides three standard counters:
+- `duty_cycles::Aeron.Counter`: Total duty cycles executed (work loop health)
+- `work_done::Aeron.Counter`: Cumulative work units processed (throughput)
+- `properties_published::Aeron.Counter`: Total property publications
+
+# Extensibility for Downstream Packages
+Downstream packages can define their own Counters struct with domain-specific counters.
+Use the `add_counter` helper function to handle boilerplate:
+
+```julia
+# In your downstream package
+struct GenIcamCounters
+    frames_captured::Aeron.Counter
+    frames_dropped::Aeron.Counter
+    exposure_adjustments::Aeron.Counter
+end
+
+function GenIcamCounters(client::Aeron.Client, agent_id::Int64, agent_name::String)
+    GenIcamCounters(
+        add_counter(client, agent_id, agent_name, 2001, "FramesCaptured"),
+        add_counter(client, agent_id, agent_name, 2002, "FramesDropped"),
+        add_counter(client, agent_id, agent_name, 2003, "ExposureAdjustments")
+    )
+end
+
+function Base.close(counters::GenIcamCounters)
+    close(counters.frames_captured)
+    close(counters.frames_dropped)
+    close(counters.exposure_adjustments)
+end
+```
+
 # External Observability
 Counters are visible in AeronStat with agent identification:
 ```
-1001: 5,455,379,113 - TotalDutyCycles [NodeId=42, Name=TestAgent]
-1002:         384 - TotalWorkDone [NodeId=42, Name=TestAgent]
-1003:           0 - PropertiesPublished [NodeId=42, Name=TestAgent]
+1001: 5,455,379,113 - TotalDutyCycles: NodeId=42 Name=TestAgent
+1002:         384 - TotalWorkDone: NodeId=42 Name=TestAgent
+1003:           0 - PropertiesPublished: NodeId=42 Name=TestAgent
 ```
-
-Each counter label includes the agent's NodeId and Name for easy identification
-when multiple agents share the same MediaDriver.
 
 # Architecture
 Counters are allocated through Aeron's CountersManager using type_id ≥ 1000
@@ -33,106 +58,98 @@ Counters are allocated through Aeron's CountersManager using type_id ≥ 1000
 - Label with agent identification for AeronStat display
 - Key buffer containing agent_id and agent_name for programmatic access
 
-# Example
+# Example Usage
 ```julia
 counters = Counters(aeron_client, node_id, agent_name)
-increment!(counters, TOTAL_DUTY_CYCLES)
-count = counter(counters, TOTAL_DUTY_CYCLES)
+Aeron.increment!(counters.duty_cycles)
+count = counters.work_done[]
 ```
 """
 
 """
-    CounterId
+    add_counter(client::Aeron.Client, agent_id::Int64, agent_name::String,
+                type_id::Int32, label::String) -> Aeron.Counter
 
-Enumeration of available performance counters.
+Helper function to allocate an Aeron counter with agent identification.
 
-Uses 1-based indexing for direct Julia vector access. These map to Aeron
-type_id values by adding `BASE_COUNTER_TYPE_ID`.
+This function handles the boilerplate of creating the key buffer with agent_id
+and agent_name, and constructing the full label with agent identification for
+AeronStat display.
 
-# Minimal Application-Level Counters
-- `TOTAL_DUTY_CYCLES`: Work loop iterations (health/liveness)
-- `TOTAL_WORK_DONE`: Accumulated work units (throughput)
-- `PROPERTIES_PUBLISHED`: Property publication events (property system activity)
+# Arguments
+- `client::Aeron.Client`: Aeron client instance
+- `agent_id::Int64`: Unique agent identifier (NodeId)
+- `agent_name::String`: Agent name for identification
+- `type_id::Int32`: Aeron counter type_id (should be ≥ 1000 for user counters)
+- `label::String`: Short counter name (e.g., "FramesCaptured")
 
-For transport metrics (messages sent/received, bytes, backpressure), use Aeron's
-native subscription/publication counters.
+# Returns
+Allocated `Aeron.Counter` that can be incremented or read.
+
+# Notes
+The key buffer format is:
+- Bytes 0-7: agent_id (Int64, little-endian)
+- Bytes 8+: agent_name (UTF-8 string)
+
+The full label will be: "\$label: NodeId=\$agent_id Name=\$agent_name"
+
+# Example
+```julia
+frames_counter = add_counter(client, 42, "GenIcam", 2001, "FramesCaptured")
+Aeron.increment!(frames_counter)
+```
 """
-@enum CounterId::Int32 begin
-    TOTAL_DUTY_CYCLES = 1
-    TOTAL_WORK_DONE = 2
-    PROPERTIES_PUBLISHED = 3
+function add_counter(client::Aeron.Client, agent_id::Int64, agent_name::String,
+                     type_id::Int32, label::String)
+    # Create key buffer with agent ID and name for counter identification
+    # Format: [agent_id (8 bytes)] [agent_name (UTF-8 string)]
+    name_bytes = codeunits(agent_name)
+    key_buffer = Vector{UInt8}(undef, sizeof(Int64) + length(name_bytes))
+    
+    # Write agent_id (first 8 bytes)
+    key_buffer[1:8] .= reinterpret(UInt8, [agent_id])
+    
+    # Write agent_name (remaining bytes)
+    key_buffer[9:end] .= name_bytes
+    
+    # Construct label with agent identification
+    full_label = "$label: NodeId=$agent_id Name=$agent_name"
+    
+    return Aeron.add_counter(client, type_id, key_buffer, full_label)
 end
-
-"""
-    BASE_COUNTER_TYPE_ID
-
-Base type_id for RtcFramework counters in Aeron's counter system.
-User counters must use type_id ≥ 1000 per Aeron convention.
-"""
-const BASE_COUNTER_TYPE_ID = Int32(1000)
-
-"""
-    CounterMetadata
-
-Metadata describing a performance counter.
-
-# Fields
-- `id::CounterId`: unique counter identifier (maps to index)
-- `type_id::Int32`: Aeron type_id (BASE_COUNTER_TYPE_ID + id)
-- `label::String`: short counter name for display in AeronStat
-- `description::String`: detailed counter description
-"""
-struct CounterMetadata
-    id::CounterId
-    type_id::Int32
-    label::String
-    description::String
-end
-
-"""
-    COUNTER_METADATA
-
-Metadata for all defined counters in enumeration order.
-
-Type IDs are automatically calculated as BASE_COUNTER_TYPE_ID + enum_value.
-"""
-const COUNTER_METADATA = [
-    CounterMetadata(TOTAL_DUTY_CYCLES, BASE_COUNTER_TYPE_ID + Int32(TOTAL_DUTY_CYCLES), "TotalDutyCycles", "Total duty cycles executed"),
-    CounterMetadata(TOTAL_WORK_DONE, BASE_COUNTER_TYPE_ID + Int32(TOTAL_WORK_DONE), "TotalWorkDone", "Cumulative work units processed"),
-    CounterMetadata(PROPERTIES_PUBLISHED, BASE_COUNTER_TYPE_ID + Int32(PROPERTIES_PUBLISHED), "PropertiesPublished", "Total property publications"),
-]
 
 """
     Counters
 
-Immutable container for Aeron performance counters with agent identification.
+Container for RtcFramework's standard performance counters.
 
-Stores the vector of allocated Aeron counters along with agent metadata that
-is encoded in each counter's key buffer for external observability via AeronStat.
+Each counter is an `Aeron.Counter` allocated in the MediaDriver's shared memory,
+visible via AeronStat for external monitoring.
 
 # Fields
-- `vec::Vector{Aeron.Counter}`: allocated counters indexed by CounterId
-- `agent_id::Int64`: agent's unique node ID
-- `agent_name::String`: agent's name for identification in AeronStat
+- `duty_cycles::Aeron.Counter`: Total duty cycles executed (work loop health)
+- `work_done::Aeron.Counter`: Cumulative work units processed (throughput)
+- `properties_published::Aeron.Counter`: Total property publications
 
-# Notes
-The key buffer for each counter contains:
-- agent_id (8 bytes): numeric identifier
-- agent_name (variable): UTF-8 encoded name string
-
-This allows AeronStat to display counter labels like:
-"TotalDutyCycles: NodeId=42 Name=MyAgent"
+# See Also
+- `add_counter`: Helper function for creating custom counters
+- Downstream packages can define their own Counters struct with domain-specific fields
 """
 struct Counters
-    vec::Vector{Aeron.Counter}
-    agent_id::Int64
-    agent_name::String
+    duty_cycles::Aeron.Counter
+    work_done::Aeron.Counter
+    properties_published::Aeron.Counter
 end
 
 """
     Counters(client::Aeron.Client, agent_id::Int64, agent_name::String) -> Counters
 
-Allocate all RtcFramework counters in Aeron's shared memory with agent identification.
+Allocate RtcFramework's standard performance counters in Aeron's shared memory.
+
+Creates three counters with agent identification for external monitoring via AeronStat:
+- Type ID 1001: TotalDutyCycles
+- Type ID 1002: TotalWorkDone
+- Type ID 1003: PropertiesPublished
 
 # Arguments
 - `client::Aeron.Client`: Aeron client instance
@@ -140,95 +157,21 @@ Allocate all RtcFramework counters in Aeron's shared memory with agent identific
 - `agent_name::String`: Agent name for AeronStat display
 
 # Returns
-Counters container with allocated Aeron.Counter instances indexed by CounterId enum.
+`Counters` struct with allocated Aeron.Counter fields.
 
-# Notes
-Each counter is allocated with:
-- type_id from COUNTER_METADATA
-- label from COUNTER_METADATA (e.g., "TotalDutyCycles")
-- key buffer containing agent_id and agent_name for identification
-
-The key buffer format is:
-- Bytes 0-7: agent_id (Int64, little-endian)
-- Bytes 8+: agent_name (UTF-8 string)
-
-This enables AeronStat to display counters with context:
-```
-1001: 5,455,379,113 - TotalDutyCycles: NodeId=42 Name=TestAgent
-1002:         384 - TotalWorkDone: NodeId=42 Name=TestAgent
-1003:           0 - PropertiesPublished: NodeId=42 Name=TestAgent
+# Example
+```julia
+counters = Counters(aeron_client, 42, "TestAgent")
+Aeron.increment!(counters.duty_cycles)
+work_count = counters.work_done[]
 ```
 """
 function Counters(client::Aeron.Client, agent_id::Int64, agent_name::String)
-    vec = Vector{Aeron.Counter}(undef, length(instances(CounterId)))
-
-    # Create key buffer with agent ID and name for counter identification
-    # Format: [agent_id (8 bytes)] [agent_name (UTF-8 string)]
-    name_bytes = codeunits(agent_name)
-    key_buffer = Vector{UInt8}(undef, sizeof(Int64) + length(name_bytes))
-
-    # Write agent_id (first 8 bytes)
-    key_buffer[1:8] .= reinterpret(UInt8, [agent_id])
-
-    # Write agent_name (remaining bytes)
-    key_buffer[9:end] .= name_bytes
-
-    for metadata in COUNTER_METADATA
-        idx = Int(metadata.id)
-        # Construct label with agent identification
-        label = "$(metadata.label): NodeId=$agent_id Name=$agent_name"
-        vec[idx] = Aeron.add_counter(client, metadata.type_id, key_buffer, label)
-    end
-
-    return Counters(vec, agent_id, agent_name)
-end
-
-"""
-    counter(counters::Counters, id::CounterId) -> Int64
-
-Get the current value of the specified counter.
-
-# Arguments
-- `counters`: Counters container with allocated Aeron counters
-- `id`: CounterId enum value
-
-# Returns
-Current counter value (atomically loaded)
-"""
-@inline function counter(counters::Counters, id::CounterId)
-    @inbounds counters.vec[Int(id)][]
-end
-
-"""
-    counter!(counters::Counters, id::CounterId, value::Int64)
-
-Set a counter to an explicit value.
-
-Uses Aeron's atomic set operation for thread-safe updates.
-
-# Arguments
-- `counters`: Counters container with allocated Aeron counters
-- `id`: CounterId enum value
-- `value`: New counter value
-"""
-@inline function counter!(counters::Counters, id::CounterId, value::Int64)
-    @inbounds counters.vec[Int(id)][] = value
-end
-
-"""
-    increment!(counters::Counters, id::CounterId, delta::Int=1)
-
-Increment the specified counter by delta (default 1).
-
-# Arguments
-- `counters`: Counters container with allocated Aeron counters
-- `id`: CounterId enum value
-- `delta`: Amount to increment by (default 1)
-
-Performs atomic increment operation with bounds checking elided via @inbounds.
-"""
-@inline function increment!(counters::Counters, id::CounterId, delta::Int64=1)
-    @inbounds Aeron.increment!(counters.vec[Int(id)], delta)
+    Counters(
+        add_counter(client, agent_id, agent_name, Int32(1001), "TotalDutyCycles"),
+        add_counter(client, agent_id, agent_name, Int32(1002), "TotalWorkDone"),
+        add_counter(client, agent_id, agent_name, Int32(1003), "PropertiesPublished")
+    )
 end
 
 """
@@ -240,7 +183,7 @@ This should be called during agent shutdown to properly release counter resource
 in the MediaDriver's shared memory.
 """
 function Base.close(counters::Counters)
-    for counter in counters.vec
-        close(counter)
-    end
+    close(counters.duty_cycles)
+    close(counters.work_done)
+    close(counters.properties_published)
 end

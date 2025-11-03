@@ -125,13 +125,12 @@ function _precompile_rtcframework()
     # Property Management API
     # =============================================================================
 
-    # Property registration and management
-    precompile(Tuple{typeof(register!),AbstractRtcAgent,Symbol,Int,PublishStrategy})
-    precompile(Tuple{typeof(unregister!),AbstractRtcAgent,Symbol,Int})
-    precompile(Tuple{typeof(unregister!),AbstractRtcAgent,Symbol})
-    precompile(Tuple{typeof(isregistered),AbstractRtcAgent,Symbol})
-    precompile(Tuple{typeof(isregistered),AbstractRtcAgent,Symbol,Int})
-    precompile(Tuple{typeof(empty!),AbstractRtcAgent})
+    # Property publication registration
+    precompile(Tuple{typeof(register_property!),AbstractRtcAgent,Symbol,Int,PublishStrategy})
+    precompile(Tuple{typeof(unregister_property!),AbstractRtcAgent,Symbol,Int})
+    precompile(Tuple{typeof(unregister_property!),AbstractRtcAgent,Symbol})
+    precompile(Tuple{typeof(isregistered_property),AbstractRtcAgent,Symbol})
+    precompile(Tuple{typeof(isregistered_property),AbstractRtcAgent,Symbol,Int})
 
     # =============================================================================
     # Property Value Handling - Performance Critical
@@ -212,14 +211,12 @@ function _precompile_rtcframework()
     # =============================================================================
 
     # Poller registration and management
-    precompile(Tuple{typeof(register_poller!),Function,AbstractRtcAgent,Symbol,Int})
-    precompile(Tuple{typeof(unregister_poller!),AbstractRtcAgent,Symbol})
-    precompile(Tuple{typeof(clear_pollers!),AbstractRtcAgent})
+    precompile(Tuple{typeof(register!),Function,PollerRegistry,Symbol,Int})
+    precompile(Tuple{typeof(unregister!),PollerRegistry,Symbol})
     precompile(Tuple{typeof(pollers),AbstractRtcAgent})
 
     # PollerRegistry collections interface
     precompile(Tuple{typeof(Base.in),Symbol,PollerRegistry})
-    precompile(Tuple{typeof(Base.in),Symbol,AbstractRtcAgent})
     precompile(Tuple{typeof(Base.length),PollerRegistry})
     precompile(Tuple{typeof(Base.isempty),PollerRegistry})
     precompile(Tuple{typeof(Base.empty!),PollerRegistry})
@@ -234,10 +231,10 @@ function _precompile_rtcframework()
     precompile(Tuple{Type{FunctionWrapper{Int,Tuple{AbstractRtcAgent}}},Function})
 
     # Internal poller system operations (hot paths)
-    precompile(Tuple{typeof(poll_pollers!),PollerRegistry,AbstractRtcAgent})
-    precompile(Tuple{typeof(apply_poller_changes!),PollerRegistry})
-    precompile(Tuple{typeof(request_add!),PollerRegistry,PollerConfig})
-    precompile(Tuple{typeof(request_remove!),PollerRegistry,Symbol})
+    precompile(Tuple{typeof(poll),PollerRegistry,AbstractRtcAgent})
+    precompile(Tuple{typeof(apply!),PollerRegistry})
+    precompile(Tuple{typeof(add!),PollerRegistry,PollerConfig})
+    precompile(Tuple{typeof(remove!),PollerRegistry,Symbol})
 
     # =============================================================================
     # Message Handlers and Pollers
@@ -341,14 +338,9 @@ function _precompile_rtcframework()
     # Counter System - Performance Counters
     # =============================================================================
 
-    # Counter construction
+    # Counter construction and helpers
     precompile(Tuple{typeof(Counters),Aeron.Client,Int64,String})
-
-    # Counter operations - hot path functions called in do_work
-    precompile(Tuple{typeof(counter),Counters,CounterId})
-    precompile(Tuple{typeof(counter!),Counters,CounterId,Int64})
-    precompile(Tuple{typeof(increment!),Counters,CounterId})
-    precompile(Tuple{typeof(increment!),Counters,CounterId,Int})
+    precompile(Tuple{typeof(add_counter),Aeron.Client,Int64,String,Int32,String})
 
     # Counter lifecycle
     precompile(Tuple{typeof(Base.close),Counters})

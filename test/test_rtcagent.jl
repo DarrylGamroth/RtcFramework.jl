@@ -18,7 +18,7 @@ function test_rtcagent(client)
         @test !isnothing(base(agent).properties)
         @test !isnothing(base(agent).id_gen)
         @test !isnothing(base(agent).timers)
-        @test isempty(base(agent).property_registry)
+        @test isempty(base(agent).publication_configs)
         @test base(agent).control_adapter === nothing  # Not yet initialized
         @test isempty(base(agent).input_adapters)      # Not yet initialized
         @test base(agent).status_proxy === nothing     # Not yet initialized
@@ -111,11 +111,8 @@ function test_rtcagent(client)
         agent = TestAgent.RtcAgent(base_agent)
 
         # Test property registry operations
-        @test isempty(base(agent).property_registry)
-        @test !isregistered(agent, :TestProperty)
-
-        # Test that we can access registry functions
-        @test empty!(agent) == 0  # No registrations to clear
+        @test isempty(base(agent).publication_configs)
+        @test !isregistered_property(agent, :TestProperty)
     end
 
     @testset "Error Handling" begin

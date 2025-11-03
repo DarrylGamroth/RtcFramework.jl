@@ -38,10 +38,8 @@ include("precompile.jl")
 
 # Exports
 
-# Counter system
-export CounterId, CounterMetadata, COUNTER_METADATA, BASE_COUNTER_TYPE_ID
-export Counters, counter, counter!, increment!
-export TOTAL_DUTY_CYCLES, TOTAL_WORK_DONE, PROPERTIES_PUBLISHED
+# Counters
+export Counters, add_counter
 
 # Property system
 export @base_properties
@@ -49,8 +47,9 @@ export GCStats
 export PropertyError, PropertyNotFoundError, EnvironmentVariableError
 
 # Poller system
-export register_poller!, unregister_poller!, clear_pollers!, pollers
+export pollers
 export PollerFunction, PollerConfig, PollerRegistry
+export register!, unregister!  # For pollers only
 
 # Core types
 export AbstractRtcAgent, BaseRtcAgent, base
@@ -64,8 +63,8 @@ export PublishStrategy, OnUpdate, Periodic, Scheduled, RateLimited
 # Timer infrastructure
 export PolledTimer, schedule!, schedule_at!, cancel!
 
-# Property registration
-export register!, unregister!, isregistered
+# Property publication registration
+export register_property!, unregister_property!, isregistered_property
 
 # High-level convenience methods
 export publish_status_event, publish_state_change, publish_event_response

@@ -196,17 +196,12 @@ macro base_properties()
         ))
     end
 
-    # Generate performance counter properties from COUNTER_METADATA
-    counter_keys = []
-    for metadata in RtcFramework.COUNTER_METADATA
-        prop_name = Symbol(metadata.label)
-        push!(counter_keys, :(
-            $prop_name::Int64 => (
-                0;
-                access = AccessMode.READABLE
-            )
-        ))
-    end
+    # Performance counter properties (hardcoded - matching Counters struct fields)
+    counter_keys = [
+        :(TotalDutyCycles::Int64 => (0; access = AccessMode.READABLE)),
+        :(TotalWorkDone::Int64 => (0; access = AccessMode.READABLE)),
+        :(PropertiesPublished::Int64 => (0; access = AccessMode.READABLE))
+    ]
 
     return esc(quote
         Name::String => (

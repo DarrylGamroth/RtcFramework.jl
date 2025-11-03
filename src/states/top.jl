@@ -27,17 +27,17 @@ end
 
     # Register pollers
 
-    # Input stream polling
-    register_poller!(input_poller, sm, :input_streams, PRIORITY_INPUT)
+        # Set up pollers - register built-in pollers
+    register!(input_poller, pollers(sm), :input_streams, PRIORITY_INPUT)
 
-    # Property publishing
-    register_poller!(property_poller, sm, :properties, PRIORITY_PROPERTY)
+    # Property publishing poller
+    register!(property_poller, pollers(sm), :properties, PRIORITY_PROPERTY)
 
-    # Timer events
-    register_poller!(timer_poller, sm, :timers, PRIORITY_TIMER)
+    # Timer poller
+    register!(timer_poller, pollers(sm), :timers, PRIORITY_TIMER)
 
-    # Control stream polling (lowest priority of built-ins)
-    register_poller!(control_poller, sm, :control_stream, PRIORITY_CONTROL)
+    # Control message poller (lowest priority)
+    register!(control_poller, pollers(sm), :control_stream, PRIORITY_CONTROL)
 
     # Schedule recurring timers
     schedule!(b.timers, 0, :Heartbeat)
@@ -52,13 +52,13 @@ end
     cancel!(b.timers)
 
     # Clear all pollers
-    clear_pollers!(sm)
+    empty!(pollers(sm))
 
     # Clear the input adapters
     empty!(b.input_adapters)
 
-    # Empty the property registry
-    empty!(b.property_registry)
+    # Empty the publication configs
+    empty!(b.publication_configs)
 
     # Clear adapters and proxies
     b.property_proxy = nothing
@@ -108,15 +108,15 @@ end
     elapsed_ns = now - b.last_stats_time
     elapsed_s = elapsed_ns / 1_000_000_000.0
 
-    msg_count = counter(counters, PROPERTIES_PUBLISHED)
-    work_count = counter(counters, TOTAL_WORK_DONE)
+    msg_count = counters.properties_published[]
+    work_count = counters.work_done[]
     msg_delta = msg_count - b.last_msg_count
     work_delta = work_count - b.last_work_count
 
     # Use StaticKV.value! to bypass READABLE access control (internal API)
     StaticKV.value!(props, msg_delta / elapsed_s, :MessageRateHz)
     StaticKV.value!(props, work_delta / elapsed_s, :WorkRateHz)
-    StaticKV.value!(props, counter(counters, TOTAL_DUTY_CYCLES), :TotalDutyCycles)
+    StaticKV.value!(props, counters.duty_cycles[], :TotalDutyCycles)
     StaticKV.value!(props, work_count, :TotalWorkDone)
     StaticKV.value!(props, msg_count, :PropertiesPublished)
 

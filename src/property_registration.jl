@@ -6,7 +6,7 @@ in the agent's publication registry for scheduled property updates.
 """
 
 """
-    register!(agent::AbstractRtcAgent, field::Symbol, stream_index::Int, strategy::PublishStrategy)
+    register_property!(agent::AbstractRtcAgent, field::Symbol, stream_index::Int, strategy::PublishStrategy)
 
 Register a property for publication using a publication stream by index.
 
@@ -22,7 +22,7 @@ A property can be registered multiple times with different streams and strategie
 # Throws
 - `StreamNotFoundError`: if stream_index is out of bounds
 """
-function register!(agent::AbstractRtcAgent,
+function register_property!(agent::AbstractRtcAgent,
     field::Symbol,
     stream_index::Int,
     strategy::PublishStrategy)
@@ -43,71 +43,57 @@ function register!(agent::AbstractRtcAgent,
         strategy,
         output_streams[stream_index]
     )
-    push!(b.property_registry, config)
+    push!(b.publication_configs, config)
 
     @info "Registered property: $field on stream $stream_index with strategy $strategy"
 end
 
 """
-    unregister!(agent::AbstractRtcAgent, field::Symbol, stream_index::Int) -> Int
+    unregister_property!(agent::AbstractRtcAgent, field::Symbol, stream_index::Int) -> Int
 
 Remove a specific property-stream registration from the publication registry.
 
 Returns the number of registrations removed (0 or 1).
 """
-function unregister!(agent::AbstractRtcAgent, field::Symbol, stream_index::Int)
-    if !isregistered(agent, field, stream_index)
+function unregister_property!(agent::AbstractRtcAgent, field::Symbol, stream_index::Int)
+    if !isregistered_property(agent, field, stream_index)
         return 0
     end
 
     b = base(agent)
-    indices = findall(config -> config.field == field && config.stream_index == stream_index, b.property_registry)
-    deleteat!(b.property_registry, indices)
+    indices = findall(config -> config.field == field && config.stream_index == stream_index, b.publication_configs)
+    deleteat!(b.publication_configs, indices)
 
     return length(indices)
 end
 
 """
-    unregister!(agent::AbstractRtcAgent, field::Symbol) -> Int
+    unregister_property!(agent::AbstractRtcAgent, field::Symbol) -> Int
 
 Remove all registrations for a property field from the publication registry.
 
 Returns the number of registrations removed.
 """
-function unregister!(agent::AbstractRtcAgent, field::Symbol)
-    if !isregistered(agent, field)
+function unregister_property!(agent::AbstractRtcAgent, field::Symbol)
+    if !isregistered_property(agent, field)
         return 0
     end
 
     b = base(agent)
-    indices = findall(config -> config.field == field, b.property_registry)
-    deleteat!(b.property_registry, indices)
+    indices = findall(config -> config.field == field, b.publication_configs)
+    deleteat!(b.publication_configs, indices)
 
     return length(indices)
 end
 
 """
-    isregistered(agent::AbstractRtcAgent, field::Symbol) -> Bool
-    isregistered(agent::AbstractRtcAgent, field::Symbol, stream_index::Int) -> Bool
+    isregistered_property(agent::AbstractRtcAgent, field::Symbol) -> Bool
+    isregistered_property(agent::AbstractRtcAgent, field::Symbol, stream_index::Int) -> Bool
 
 Check if a property is registered for publication.
 
 With only field specified, returns true if the field is registered on any stream.
 With both field and stream_index specified, returns true if the field is registered on that specific stream.
 """
-isregistered(agent::AbstractRtcAgent, field::Symbol) = any(config -> config.field == field, base(agent).property_registry)
-isregistered(agent::AbstractRtcAgent, field::Symbol, stream_index::Int) = any(config -> config.field == field && config.stream_index == stream_index, base(agent).property_registry)
-
-"""
-    Base.empty!(agent::AbstractRtcAgent) -> Int
-
-Clear all registered property publications.
-
-Returns the number of registrations removed.
-"""
-function Base.empty!(agent::AbstractRtcAgent)
-    b = base(agent)
-    count = length(b.property_registry)
-    empty!(b.property_registry)
-    return count
-end
+isregistered_property(agent::AbstractRtcAgent, field::Symbol) = any(config -> config.field == field, base(agent).publication_configs)
+isregistered_property(agent::AbstractRtcAgent, field::Symbol, stream_index::Int) = any(config -> config.field == field && config.stream_index == stream_index, base(agent).publication_configs)

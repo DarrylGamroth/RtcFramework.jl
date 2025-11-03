@@ -15,7 +15,7 @@ function test_property_publishing(client)
         @test base(agent).properties !== nothing
         
         # Test that registry is accessible
-        @test base(agent).property_registry isa Vector
+        @test base(agent).publication_configs isa Vector
         
         Agent.on_close(agent)
     end
@@ -56,8 +56,8 @@ function test_property_publishing(client)
         agent = TestAgent.RtcAgent(base_agent)
         
         # Test basic agent functionality without streams
-        @test base(agent).property_registry isa Vector
-        @test isempty(base(agent).property_registry)  # No registrations yet
+        @test base(agent).publication_configs isa Vector
+        @test isempty(base(agent).publication_configs)  # No registrations yet
         
         Agent.on_start(agent)
         Agent.on_close(agent)

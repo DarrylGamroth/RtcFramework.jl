@@ -23,7 +23,7 @@ transitions. Generic parameters allow customization of core components.
 - `property_proxy::Union{Nothing,PropertyProxy}`: property publishing interface
 - `control_adapter::Union{Nothing,ControlStreamAdapter}`: control message handler
 - `input_adapters::Vector{InputStreamAdapter}`: input stream processors
-- `property_registry::Vector{PublicationConfig}`: registered property configs
+- `publication_configs::Vector{PublicationConfig}`: property publication configurations
 - `poller_registry::PollerRegistry`: poller management with deferred add/remove
 - `counters::Counters`: Aeron-allocated performance counters for external observability
 - `last_stats_time::Int64`: timestamp of last stats update (nanoseconds)
@@ -41,7 +41,7 @@ mutable struct BaseRtcAgent{C<:AbstractClock,P<:AbstractStaticKV,ID<:SnowflakeId
     property_proxy::Union{Nothing,PropertyProxy}
     control_adapter::Union{Nothing,ControlStreamAdapter}
     input_adapters::Vector{InputStreamAdapter}
-    property_registry::Vector{PublicationConfig}
+    publication_configs::Vector{PublicationConfig}
     poller_registry::PollerRegistry
     counters::Counters
     last_stats_time::Int64
@@ -146,11 +146,11 @@ function Agent.do_work(agent::AbstractRtcAgent)
     b = base(agent)
     fetch!(b.clock)
 
-    work_count = poll_pollers!(b.poller_registry, agent)
+    work_count = poll(b.poller_registry, agent)
 
     counters = b.counters
-    increment!(counters, TOTAL_DUTY_CYCLES)
-    increment!(counters, TOTAL_WORK_DONE, work_count)
+    Aeron.increment!(counters.duty_cycles)
+    Aeron.increment!(counters.work_done, work_count)
 
     return work_count
 end
@@ -210,7 +210,7 @@ state, and counts the dispatch. Returns the number of properties that should pub
 """
 function property_poller(agent::AbstractRtcAgent)
     b = base(agent)
-    registry = b.property_registry
+    registry = b.publication_configs
     isempty(registry) && return 0
 
     now = time_nanos(b.clock)
@@ -230,7 +230,7 @@ function property_poller(agent::AbstractRtcAgent)
     end
 
     if count > 0
-        increment!(b.counters, PROPERTIES_PUBLISHED, count)
+        Aeron.increment!(b.counters.properties_published, count)
     end
 
     return count
