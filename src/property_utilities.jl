@@ -200,7 +200,8 @@ macro base_properties()
     counter_keys = [
         :(TotalDutyCycles::Int64 => (0; access = AccessMode.READABLE)),
         :(TotalWorkDone::Int64 => (0; access = AccessMode.READABLE)),
-        :(PropertiesPublished::Int64 => (0; access = AccessMode.READABLE))
+        :(PropertiesPublished::Int64 => (0; access = AccessMode.READABLE)),
+        :(EventsDispatched::Int64 => (0; access = AccessMode.READABLE))
     ]
 
     return esc(quote
@@ -285,8 +286,8 @@ macro base_properties()
 
         $(gc_keys...)
         
-        # Performance counters (auto-generated from COUNTER_METADATA)
-        # Minimal set: TotalDutyCycles, TotalWorkDone, PropertiesPublished
+        # Performance counters (auto-generated from Counters struct)
+        # Minimal set: TotalDutyCycles, TotalWorkDone, PropertiesPublished, EventsDispatched
         $(counter_keys...)
         
         # Derived metrics (calculated periodically from counters)

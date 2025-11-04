@@ -119,6 +119,7 @@ end
     StaticKV.value!(props, counters.duty_cycles[], :TotalDutyCycles)
     StaticKV.value!(props, work_count, :TotalWorkDone)
     StaticKV.value!(props, msg_count, :PropertiesPublished)
+    StaticKV.value!(props, counters.events_dispatched[], :EventsDispatched)
 
     # Save state for next delta calculation
     b.last_stats_time = now

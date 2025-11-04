@@ -28,6 +28,8 @@ function dispatch!(agent::AbstractRtcAgent, event::Symbol, message=nothing)
         Hsm.dispatch!(agent, event, message)
         current = Hsm.current(agent)
 
+        Aeron.increment!(counters(agent).events_dispatched)
+
         if prev != current
             publish_state_change(agent, current)
         end

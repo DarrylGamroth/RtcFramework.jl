@@ -339,8 +339,9 @@ function _precompile_rtcframework()
     # =============================================================================
 
     # Counter construction and helpers
-    precompile(Tuple{typeof(Counters),Aeron.Client,Int64,String})
-    precompile(Tuple{typeof(add_counter),Aeron.Client,Int64,String,Int32,String})
+    precompile(Tuple{typeof(Counters),Aeron.Client,Int,String})
+    precompile(Tuple{typeof(add_counter),Aeron.Client,Int,String,Int,String})
+    precompile(Tuple{typeof(make_counter_type_id),Int,Int})
 
     # Counter lifecycle
     precompile(Tuple{typeof(Base.close),Counters})
@@ -356,6 +357,8 @@ function _precompile_rtcframework()
     # Convenience accessors for service code
     precompile(Tuple{typeof(properties),AbstractRtcAgent})
     precompile(Tuple{typeof(timers),AbstractRtcAgent})
+    precompile(Tuple{typeof(counters),AbstractRtcAgent})
+    precompile(Tuple{typeof(comms),AbstractRtcAgent})
 
     nothing
 end

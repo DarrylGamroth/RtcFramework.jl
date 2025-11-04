@@ -90,7 +90,7 @@ end
 
 Get the name of this agent from its property store.
 """
-Agent.name(agent::AbstractRtcAgent) = base(agent).properties[:Name]
+Agent.name(agent::AbstractRtcAgent) = properties(agent)[:Name]
 
 """
     Agent.on_start(agent::AbstractRtcAgent)
@@ -192,7 +192,7 @@ Poll the timer system for expired timers and dispatch their events.
 Returns the number of timers that fired.
 """
 function timer_poller(agent::AbstractRtcAgent)
-    Timers.poll(base(agent).timers, agent) do event, now, agent
+    Timers.poll(timers(agent), agent) do event, now, agent
         b = base(agent)
         b.source_correlation_id = next_id(b.id_gen)
         dispatch!(agent, event, now)

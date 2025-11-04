@@ -53,7 +53,7 @@ export register!, unregister!  # For pollers only
 
 # Core types
 export AbstractRtcAgent, BaseRtcAgent, base
-export properties, timers
+export properties, timers, counters, comms
 
 # Communication infrastructure
 export CommunicationResources

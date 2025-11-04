@@ -59,7 +59,7 @@ function ControlStreamAdapter(subscription::Aeron.Subscription, agent::AbstractR
     end
 
     # Apply filtering if configured
-    props = base(agent).properties
+    props = properties(agent)
     filtered_handler = if isset(props, :ControlFilter)
         SpidersTagFragmentFilter(fragment_handler, props[:ControlFilter])
     else
