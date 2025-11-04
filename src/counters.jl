@@ -80,8 +80,8 @@ RtcFramework's standard performance counters.
 - `events_dispatched`: Total events dispatched
 """
 struct Counters
-    duty_cycles::Aeron.Counter
-    work_done::Aeron.Counter
+    total_duty_cycles::Aeron.Counter
+    total_work_done::Aeron.Counter
     properties_published::Aeron.Counter
     events_dispatched::Aeron.Counter
 end
@@ -106,8 +106,8 @@ end
 Close all counters and release MediaDriver resources.
 """
 function Base.close(counters::Counters)
-    close(counters.duty_cycles)
-    close(counters.work_done)
+    close(counters.total_duty_cycles)
+    close(counters.total_work_done)
     close(counters.properties_published)
     close(counters.events_dispatched)
 end

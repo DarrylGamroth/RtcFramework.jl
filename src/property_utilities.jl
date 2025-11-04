@@ -196,15 +196,23 @@ macro base_properties()
         ))
     end
 
-    # Performance counter properties (hardcoded - matching Counters struct fields)
-    counter_keys = [
-        :(TotalDutyCycles::Int64 => (0; access = AccessMode.READABLE)),
-        :(TotalWorkDone::Int64 => (0; access = AccessMode.READABLE)),
-        :(PropertiesPublished::Int64 => (0; access = AccessMode.READABLE)),
-        :(EventsDispatched::Int64 => (0; access = AccessMode.READABLE))
-    ]
+    # Generate performance counter properties (mirroring Counters struct fields)
+    counter_keys = []
+    for fname in fieldnames(RtcFramework.Counters)
+        # Convert snake_case to PascalCase: duty_cycles -> DutyCycles
+        name_parts = split(string(fname), '_')
+        pascal_name = join([uppercasefirst(part) for part in name_parts])
+        prop_name = Symbol(pascal_name)
+        
+        push!(counter_keys, :(
+            $prop_name::Int64 => (0; access = AccessMode.READABLE)
+        ))
+    end
 
     return esc(quote
+        # =============================================================================
+        # Service Identity
+        # =============================================================================
         Name::String => (
             get(ENV, "BLOCK_NAME") do
                 throw(RtcFramework.EnvironmentVariableError("BLOCK_NAME"))
@@ -217,6 +225,10 @@ macro base_properties()
             end);
             access = AccessMode.READABLE
         )
+
+        # =============================================================================
+        # Communication Configuration
+        # =============================================================================
         StatusURI::String => (
             get(ENV, "STATUS_URI") do
                 throw(RtcFramework.EnvironmentVariableError("STATUS_URI"))
@@ -245,6 +257,14 @@ macro base_properties()
             get(ENV, "CONTROL_FILTER", nothing);
             access = AccessMode.READABLE
         )
+
+        # Dynamic data streams (from environment variables)
+        $(sub_keys...)
+        $(pub_keys...)
+
+        # =============================================================================
+        # Timing Configuration
+        # =============================================================================
         HeartbeatPeriodNs::Int64 => (
             parse(Int64, get(ENV, "HEARTBEAT_PERIOD_NS", "10000000000"))
         )
@@ -252,6 +272,16 @@ macro base_properties()
             parse(Int64, get(ENV, "LATE_MESSAGE_THRESHOLD_NS", "1000000000"));
             access = AccessMode.READABLE
         )
+        StatsPeriodNs::Int64 => (
+            parse(Int64, get(ENV, "STATS_PERIOD_NS", "5000000000"))
+        )
+        GCStatsPeriodNs::Int64 => (
+            parse(Int64, get(ENV, "GC_STATS_PERIOD_NS", "10000000000"))
+        )
+
+        # =============================================================================
+        # Runtime Management
+        # =============================================================================
         LogLevel::Symbol => (
             Symbol(get(ENV, "LOG_LEVEL", "Debug"));
             on_set = (obj, name, val) -> begin
@@ -270,10 +300,6 @@ macro base_properties()
             access = AccessMode.WRITABLE,
             on_set=(obj, name, val) -> (GC.gc(val); val),
         )
-        GCStatsPeriodNs::Int64 => (
-            parse(Int64, get(ENV, "GC_STATS_PERIOD_NS", "10000000000"))
-        )
-                
         GCEnable::Bool => (
             true;
             on_set=(obj, name, val) -> (GC.enable(val); val),
@@ -284,15 +310,14 @@ macro base_properties()
             on_get=(obj, name, val) -> GC.logging_enabled()
         )
 
-        $(gc_keys...)
-        
-        # Performance counters (auto-generated from Counters struct)
-        # Minimal set: TotalDutyCycles, TotalWorkDone, PropertiesPublished, EventsDispatched
+        # =============================================================================
+        # Performance Counters (mirrored from Aeron counters)
+        # =============================================================================
         $(counter_keys...)
-        
-        # Derived metrics (calculated periodically from counters)
-        # MessageRateHz = property publication rate (from PROPERTIES_PUBLISHED counter)
-        # WorkRateHz = work processing rate (from TOTAL_WORK_DONE counter)
+
+        # =============================================================================
+        # Derived Performance Metrics
+        # =============================================================================
         MessageRateHz::Float64 => (
             0.0;
             access = AccessMode.READABLE
@@ -301,13 +326,10 @@ macro base_properties()
             0.0;
             access = AccessMode.READABLE
         )
-        
-        # Stats update period (5 seconds default)
-        StatsPeriodNs::Int64 => (
-            parse(Int64, get(ENV, "STATS_PERIOD_NS", "5000000000"))
-        )
-        
-        $(sub_keys...)
-        $(pub_keys...)
+
+        # =============================================================================
+        # GC Statistics (mirrored from Base.GC_Num)
+        # =============================================================================
+        $(gc_keys...)
     end)
 end

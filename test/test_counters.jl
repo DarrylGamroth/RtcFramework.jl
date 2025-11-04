@@ -10,20 +10,20 @@ function test_counters(client)
         counters = Counters(client, agent_id, agent_name)
 
         # Test all counter fields are allocated
-        @test !isnothing(counters.duty_cycles)
-        @test !isnothing(counters.work_done)
+        @test !isnothing(counters.total_duty_cycles)
+        @test !isnothing(counters.total_work_done)
         @test !isnothing(counters.properties_published)
         @test !isnothing(counters.events_dispatched)
 
         # Test counters are Aeron.Counter instances
-        @test counters.duty_cycles isa Aeron.Counter
-        @test counters.work_done isa Aeron.Counter
+        @test counters.total_duty_cycles isa Aeron.Counter
+        @test counters.total_work_done isa Aeron.Counter
         @test counters.properties_published isa Aeron.Counter
         @test counters.events_dispatched isa Aeron.Counter
 
         # Test initial values are zero
-        @test counters.duty_cycles[] == 0
-        @test counters.work_done[] == 0
+        @test counters.total_duty_cycles[] == 0
+        @test counters.total_work_done[] == 0
         @test counters.properties_published[] == 0
         @test counters.events_dispatched[] == 0
     end
@@ -32,26 +32,26 @@ function test_counters(client)
         counters = Counters(client, 1, "TestOps")
 
         # Test increment by 1 (default)
-        Aeron.increment!(counters.duty_cycles)
-        @test counters.duty_cycles[] == 1
+        Aeron.increment!(counters.total_duty_cycles)
+        @test counters.total_duty_cycles[] == 1
 
-        Aeron.increment!(counters.duty_cycles)
-        @test counters.duty_cycles[] == 2
+        Aeron.increment!(counters.total_duty_cycles)
+        @test counters.total_duty_cycles[] == 2
 
         # Test increment by delta
-        Aeron.increment!(counters.work_done, 10)
-        @test counters.work_done[] == 10
+        Aeron.increment!(counters.total_work_done, 10)
+        @test counters.total_work_done[] == 10
 
-        Aeron.increment!(counters.work_done, 5)
-        @test counters.work_done[] == 15
+        Aeron.increment!(counters.total_work_done, 5)
+        @test counters.total_work_done[] == 15
 
         # Test set operation
         counters.properties_published[] = 100
         @test counters.properties_published[] == 100
 
         # Test counters are independent
-        @test counters.duty_cycles[] == 2
-        @test counters.work_done[] == 15
+        @test counters.total_duty_cycles[] == 2
+        @test counters.total_work_done[] == 15
         @test counters.properties_published[] == 100
 
         # Test events_dispatched counter
@@ -82,21 +82,21 @@ function test_counters(client)
         agent3 = Counters(client, 3, "Agent3")
 
         # Each agent's counters are independent
-        Aeron.increment!(agent1.duty_cycles, 10)
-        Aeron.increment!(agent2.duty_cycles, 20)
-        Aeron.increment!(agent3.duty_cycles, 30)
+        Aeron.increment!(agent1.total_duty_cycles, 10)
+        Aeron.increment!(agent2.total_duty_cycles, 20)
+        Aeron.increment!(agent3.total_duty_cycles, 30)
 
-        @test agent1.duty_cycles[] == 10
-        @test agent2.duty_cycles[] == 20
-        @test agent3.duty_cycles[] == 30
+        @test agent1.total_duty_cycles[] == 10
+        @test agent2.total_duty_cycles[] == 20
+        @test agent3.total_duty_cycles[] == 30
     end
 
     @testset "Counter close" begin
         counters = Counters(client, 100, "TestClose")
 
         # Verify counters are open
-        @test Aeron.isopen(counters.duty_cycles)
-        @test Aeron.isopen(counters.work_done)
+        @test Aeron.isopen(counters.total_duty_cycles)
+        @test Aeron.isopen(counters.total_work_done)
         @test Aeron.isopen(counters.properties_published)
         @test Aeron.isopen(counters.events_dispatched)
 
@@ -104,8 +104,8 @@ function test_counters(client)
         close(counters)
 
         # Verify all counters are closed
-        @test !Aeron.isopen(counters.duty_cycles)
-        @test !Aeron.isopen(counters.work_done)
+        @test !Aeron.isopen(counters.total_duty_cycles)
+        @test !Aeron.isopen(counters.total_work_done)
         @test !Aeron.isopen(counters.properties_published)
         @test !Aeron.isopen(counters.events_dispatched)
     end

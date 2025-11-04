@@ -149,8 +149,8 @@ function Agent.do_work(agent::AbstractRtcAgent)
     work_count = poll(b.poller_registry, agent)
 
     counters = b.counters
-    Aeron.increment!(counters.duty_cycles)
-    Aeron.increment!(counters.work_done, work_count)
+    Aeron.increment!(counters.total_duty_cycles)
+    Aeron.increment!(counters.total_work_done, work_count)
 
     return work_count
 end

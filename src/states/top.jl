@@ -109,14 +109,14 @@ end
     elapsed_s = elapsed_ns / 1_000_000_000.0
 
     msg_count = counters.properties_published[]
-    work_count = counters.work_done[]
+    work_count = counters.total_work_done[]
     msg_delta = msg_count - b.last_msg_count
     work_delta = work_count - b.last_work_count
 
     # Use StaticKV.value! to bypass READABLE access control (internal API)
     StaticKV.value!(props, msg_delta / elapsed_s, :MessageRateHz)
     StaticKV.value!(props, work_delta / elapsed_s, :WorkRateHz)
-    StaticKV.value!(props, counters.duty_cycles[], :TotalDutyCycles)
+    StaticKV.value!(props, counters.total_duty_cycles[], :TotalDutyCycles)
     StaticKV.value!(props, work_count, :TotalWorkDone)
     StaticKV.value!(props, msg_count, :PropertiesPublished)
     StaticKV.value!(props, counters.events_dispatched[], :EventsDispatched)
