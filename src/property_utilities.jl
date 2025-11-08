@@ -12,35 +12,35 @@ Wrapper struct for Base.GC_Num with abbreviated field names to fit SBE constrain
 Field names are shortened from Base.GC_Num to stay within SBE key field length limits.
 """
 struct GCStats
-    allocd::Int64
-    deferred_alloc::Int64
-    freed::Int64
-    malloc::Int64
-    realloc::Int64
-    poolalloc::Int64
-    bigalloc::Int64
-    freecall::Int64
-    total_time::Int64
-    total_allocd::Int64
-    collect::UInt64
-    pause::Int32
-    full_sweep::Int32
-    max_pause::Int64
-    max_memory::Int64
-    safepoint_time::Int64  # was: time_to_safepoint
-    max_safepoint_time::Int64  # was: max_time_to_safepoint
-    total_safepoint_time::Int64  # was: total_time_to_safepoint
-    sweep_time::Int64
-    mark_time::Int64
-    stack_sweep_time::Int64  # was: stack_pool_sweep_time
-    total_sweep_time::Int64
-    sweep_page_walk_time::Int64  # was: total_sweep_page_walk_time
-    sweep_madvise_time::Int64  # was: total_sweep_madvise_time
-    sweep_free_malloc_time::Int64  # was: total_sweep_free_mallocd_memory_time
-    total_mark_time::Int64
-    total_stack_sweep_time::Int64  # was: total_stack_pool_sweep_time
-    last_full_sweep::Int64
-    last_inc_sweep::Int64  # was: last_incremental_sweep
+    GcAllocd::Int64
+    GcDeferredAlloc::Int64
+    GcFreed::Int64
+    GcMalloc::Int64
+    GcRealloc::Int64
+    GcPoolalloc::Int64
+    GcBigalloc::Int64
+    GcFreecall::Int64
+    GcTotalTime::Int64
+    GcTotalAllocd::Int64
+    GcCollect::UInt64
+    GcPause::Int32
+    GcFullSweep::Int32
+    GcMaxPause::Int64
+    GcMaxMemory::Int64
+    GcTimeToSafepoint::Int64
+    GcMaxTimeToSafepoint::Int64
+    GcTotalTimeToSafepoint::Int64
+    GcSweepTime::Int64
+    GcMarkTime::Int64
+    GcStackPoolSweepTime::Int64
+    GcTotalSweepTime::Int64
+    GcTotalSweepPageWalkTime::Int64
+    GcTotalSweepMadviseTime::Int64
+    GcTotalSweepFreeMallocTime::Int64  # was: total_sweep_free_mallocd_memory_time
+    GcTotalMarkTime::Int64
+    GcTotalStackPoolSweepTime::Int64
+    GcLastFullSweep::Int64
+    GcLastIncrementalSweep::Int64
 end
 
 """
@@ -189,10 +189,9 @@ macro base_properties()
     gc_keys = []
     for fname in fieldnames(RtcFramework.GCStats)
         field_type = fieldtype(RtcFramework.GCStats, fname)
-        prop_name = Symbol("GC_", fname)
         default_val = zero(field_type)
         push!(gc_keys, :(
-            $prop_name::$field_type => $default_val
+            $fname::$field_type => $default_val
         ))
     end
 
@@ -203,7 +202,7 @@ macro base_properties()
         name_parts = split(string(fname), '_')
         pascal_name = join([uppercasefirst(part) for part in name_parts])
         prop_name = Symbol(pascal_name)
-        
+
         push!(counter_keys, :(
             $prop_name::Int64 => (0; access = AccessMode.READABLE)
         ))

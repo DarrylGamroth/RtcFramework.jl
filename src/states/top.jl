@@ -27,7 +27,7 @@ end
 
     # Register pollers
 
-        # Set up pollers - register built-in pollers
+    # Set up pollers - register built-in pollers
     register!(input_poller, pollers(sm), :input_streams, PRIORITY_INPUT)
 
     # Property publishing poller
@@ -87,9 +87,8 @@ end
 
     # Use StaticKV.value! to bypass READABLE access control (internal API)
     for fname in fieldnames(RtcFramework.GCStats)
-        prop_name = Symbol("GC_", fname)
         prop_value = getfield(gc_stats, fname)
-        StaticKV.value!(b.properties, prop_value, prop_name)
+        StaticKV.value!(b.properties, prop_value, fname)
     end
 
     # Reschedule the next GCStats event
