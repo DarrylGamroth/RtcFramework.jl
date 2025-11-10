@@ -44,6 +44,7 @@ include("test_timers.jl")
 include("test_exceptions.jl")
 include("test_pollers.jl")
 include("test_accessors.jl")
+include("test_states.jl")
 include("test_integration.jl")
 include("test_onupdate_integration.jl")
 include("test_proxy_allocations.jl")
@@ -98,6 +99,10 @@ include("test_proxy_allocations.jl")
 
                 @testset "Exception Handling Tests" begin
                     test_exceptions(client)
+                end
+
+                @testset "State Machine Tests" begin
+                    test_states(client)
                 end
 
                 @testset "Integration Tests" begin
