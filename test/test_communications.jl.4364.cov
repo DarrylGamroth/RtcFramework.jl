@@ -1,0 +1,50 @@
+        - """
+        - Test suite for communication layer functionality.
+        - Tests basic communication setup without requiring actual Aeron streams.
+        - """
+        1 function test_communications(client)
+        1     @testset "Message Publishing" begin
+        3         clock = CachedEpochClock(EpochClock())
+        1         properties = TestAgent.Properties(clock)
+        1         comms = CommunicationResources(client, properties)
+        1         base_agent = BaseRtcAgent(comms, properties, clock)
+        1         agent = TestAgent.RtcAgent(base_agent)
+        1         Agent.on_start(agent)  # Initialize adapters
+        -         
+        -         # Test that basic agent setup works
+        2         @test !isnothing(base(agent).properties)
+        1         @test base(agent).properties[:Name] isa String
+        -         
+        -         # Test that we can access agent properties
+        2         @test haskey(base(agent).properties, :Name)
+        2         @test haskey(base(agent).properties, :NodeId) 
+        2         @test haskey(base(agent).properties, :HeartbeatPeriodNs)
+        -         
+        1         Agent.on_close(agent)
+        -     end
+        -     
+        -     @testset "Communication Setup" begin
+        2         clock = CachedEpochClock(EpochClock())
+        1         properties = TestAgent.Properties(clock)
+        - 
+        -         # Test communication resources creation
+        1         comms = CommunicationResources(client, properties)
+        2         @test !isnothing(comms)
+        1         @test comms isa CommunicationResources
+        2         @test !isnothing(comms.status_stream)
+        2         @test !isnothing(comms.control_stream)
+        1         @test comms.input_streams isa Vector
+        1         @test comms.output_streams isa Vector
+        -         
+        -         # Test agent construction with dependency injection
+        1         base_agent = BaseRtcAgent(comms, properties, clock)
+        1         agent = TestAgent.RtcAgent(base_agent)
+        2         @test !isnothing(agent)
+        2         @test !isnothing(base(agent).properties)
+        1         @test base(agent).comms === comms
+        -         
+        -         # Test agent lifecycle
+        1         @test_nowarn Agent.on_start(agent)
+        1         @test_nowarn Agent.on_close(agent)
+        -     end
+        - end

@@ -1,0 +1,189 @@
+        - """
+        - Publication strategy system for controlling property publication timing.
+        - 
+        - Provides strategies that determine when and how properties should be published
+        - based on timing patterns, update events, and rate limiting requirements.
+        - 
+        - Contains sum type `PublishStrategy` with constructors `OnUpdate()`, `Periodic()`,
+        - `Scheduled()`, and `RateLimited()` for different publication behaviors.
+        - """
+        - 
+        - # Strategy implementation types
+        8 struct OnUpdateStrategy end
+        - 
+        - struct PeriodicStrategy
+        7     interval_ns::Int64
+        - end
+        - 
+        - struct ScheduledStrategy
+        6     schedule_ns::Int64
+        - end
+        - 
+        - struct RateLimitedStrategy
+        6     min_interval_ns::Int64
+        - end
+        - 
+        - @wrapped struct PublishStrategy <: WrappedUnion
+        -     union::Union{OnUpdateStrategy, PeriodicStrategy, ScheduledStrategy, RateLimitedStrategy}
+        - end
+        - 
+        - # Field access methods for convenience (avoiding unwrap() in user code)
+        - """
+        -     interval_ns(strategy::PublishStrategy)
+        - 
+        - Get the interval in nanoseconds for Periodic and RateLimited strategies.
+        - Returns the appropriate interval value, or throws an error for incompatible strategies.
+        - """
+        1 interval_ns(strategy::PublishStrategy) = @unionsplit interval_ns(strategy)
+        1 interval_ns(strategy::PeriodicStrategy) = strategy.interval_ns
+        - interval_ns(strategy::RateLimitedStrategy) = strategy.min_interval_ns
+        - 
+        - """
+        -     schedule_ns(strategy::PublishStrategy)
+        - 
+        - Get the scheduled time in nanoseconds for Scheduled strategies.
+        - Throws an error for incompatible strategies.
+        - """
+        - schedule_ns(strategy::PublishStrategy) = @unionsplit schedule_ns(strategy)
+        - schedule_ns(strategy::ScheduledStrategy) = strategy.schedule_ns
+        - 
+        - """
+        -     min_interval_ns(strategy::PublishStrategy)
+        - 
+        - Get the minimum interval in nanoseconds for RateLimited strategies.
+        - Throws an error for incompatible strategies.
+        - """
+        - min_interval_ns(strategy::PublishStrategy) = @unionsplit min_interval_ns(strategy)
+        - min_interval_ns(strategy::RateLimitedStrategy) = strategy.min_interval_ns
+        - 
+        - """
+        -     OnUpdate()
+        - 
+        - Create an OnUpdate strategy that publishes whenever a property is updated.
+        - Returns a PublishStrategy sum type for type-stable dispatch.
+        - """
+        8 OnUpdate() = PublishStrategy(OnUpdateStrategy())
+        - 
+        - """
+        -     Periodic(interval_ns::Int64)
+        - 
+        - Create a Periodic strategy that publishes at regular intervals.
+        - Returns a PublishStrategy sum type for type-stable dispatch.
+        - """
+        7 Periodic(interval_ns::Int64) = PublishStrategy(PeriodicStrategy(interval_ns))
+        - 
+        - """
+        -     Scheduled(schedule_ns::Int64)
+        - 
+        - Create a Scheduled strategy that publishes at a specific scheduled time.
+        - Returns a PublishStrategy sum type for type-stable dispatch.
+        - """
+        6 Scheduled(schedule_ns::Int64) = PublishStrategy(ScheduledStrategy(schedule_ns))
+        - 
+        - """
+        -     RateLimited(min_interval_ns::Int64)
+        - 
+        - Create a RateLimited strategy that publishes on updates but enforces a minimum interval.
+        - Returns a PublishStrategy sum type for type-stable dispatch.
+        - """
+        6 RateLimited(min_interval_ns::Int64) = PublishStrategy(RateLimitedStrategy(min_interval_ns))
+        - 
+        - """
+        -     should_publish(strategy::PublishStrategy, last_published_ns::Int64, next_scheduled_ns::Int64, property_timestamp_ns::Int64, current_time_ns::Int64)
+        - 
+        - Determine whether a property should be published based on the strategy and timing.
+        - These functions are optimized for type stability and minimal allocations using WrappedUnions.
+        - """
+        - @inline function should_publish(strategy::PublishStrategy,
+        -     last_published_ns::Int64,
+        -     next_scheduled_ns::Int64,
+        -     property_timestamp_ns::Int64,
+        -     current_time_ns::Int64)
+        - 
+      744     return @unionsplit should_publish(strategy, last_published_ns, next_scheduled_ns, property_timestamp_ns, current_time_ns)
+        - end
+        - 
+        - @inline function should_publish(::OnUpdateStrategy,
+        -     last_published_ns::Int64,
+        -     ::Int64,
+        -     property_timestamp_ns::Int64,
+        -     current_time_ns::Int64)
+        -     # First publication - always publish
+      114     if last_published_ns < 0
+        2         return true
+        -     end
+        -     
+        -     # Publish if the property was updated since the last publication
+        -     # This allows OnUpdate to work when properties are modified between polling cycles
+      112     return property_timestamp_ns > last_published_ns
+        - end
+        - 
+        - @inline function should_publish(strategy::PeriodicStrategy,
+        -     last_published_ns::Int64,
+        -     ::Int64,
+        -     ::Int64,
+        -     current_time_ns::Int64)
+      107     if last_published_ns < 0
+        1         return true  # First publication
+        -     end
+        - 
+        -     # Don't publish again if we already published at this exact time
+      106     if last_published_ns == current_time_ns
+        1         return false
+        -     end
+        - 
+      105     return (current_time_ns - last_published_ns) >= strategy.interval_ns
+        - end
+        - 
+        - @inline function should_publish(::ScheduledStrategy,
+        -     last_published_ns::Int64,
+        -     next_scheduled_ns::Int64,
+        -     ::Int64,
+        -     current_time_ns::Int64)
+        -     # Only publish if we've reached the scheduled time and haven't already published at this time
+      108     return current_time_ns >= next_scheduled_ns && last_published_ns != current_time_ns
+        - end
+        - 
+        - @inline function should_publish(strategy::RateLimitedStrategy,
+        -     last_published_ns::Int64,
+        -     ::Int64,
+        -     property_timestamp_ns::Int64,
+        -     current_time_ns::Int64)
+        -     # Only publish if the property was updated since the last publication
+      109     if property_timestamp_ns <= last_published_ns
+        2         return false
+        -     end
+        - 
+      107     if last_published_ns < 0
+        1         return true  # First publication
+        -     end
+        - 
+        -     # Property was updated, check if enough time elapsed since last publish
+      106     return (current_time_ns - last_published_ns) >= strategy.min_interval_ns
+        - end
+        - 
+        - """
+        -     next_time(strategy::PublishStrategy, current_time_ns::Int64)
+        - 
+        - Calculate the next scheduled publication time for strategies that need it.
+        - These functions are optimized for type stability using WrappedUnions.
+        - """
+        - @inline function next_time(strategy::PublishStrategy, current_time_ns::Int64)
+      723     return @unionsplit next_time(strategy, current_time_ns)
+        - end
+        - 
+        - @inline function next_time(::OnUpdateStrategy, ::Int64)
+      104     return -1
+        - end
+        - 
+        - @inline function next_time(strategy::PeriodicStrategy, current_time_ns::Int64)
+      105     return current_time_ns + strategy.interval_ns
+        - end
+        - 
+        - @inline function next_time(strategy::ScheduledStrategy, ::Int64)
+      104     return strategy.schedule_ns
+        - end
+        - 
+        - @inline function next_time(strategy::RateLimitedStrategy, current_time_ns::Int64)
+      104     return current_time_ns + strategy.min_interval_ns
+        - end

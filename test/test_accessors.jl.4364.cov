@@ -1,0 +1,64 @@
+        - """
+        - Test suite for convenience accessor functions.
+        - Tests properties() and timers() accessors for AbstractRtcAgent.
+        - """
+        1 function test_accessors(client)
+        1     @testset "Convenience Accessors" begin
+        -         # Setup
+        2         clock = CachedEpochClock(EpochClock())
+        1         props = TestAgent.Properties(clock)
+        1         comm_resources = CommunicationResources(client, props)
+        1         base_agent = BaseRtcAgent(comm_resources, props, clock)
+        1         agent = TestAgent.RtcAgent(base_agent)
+        - 
+        -         @testset "properties accessor" begin
+        -             # Test that properties(agent) returns the property store
+        3             prop_store = properties(agent)
+        1             @test prop_store === base(agent).properties
+        1             @test prop_store isa RtcFramework.AbstractStaticKV
+        - 
+        -             # Test that we can use it like the property store
+        2             @test haskey(prop_store, :Name)
+        1             @test prop_store[:Name] == "TestAgent"
+        - 
+        -             # Test that we can read existing fields
+        1             @test prop_store[:NodeId] == 1
+        1             @test properties(agent)[:NodeId] == base(agent).properties[:NodeId]
+        -         end
+        - 
+        -         @testset "timers accessor" begin
+        -             # Test that timers(agent) returns the timer system
+        3             timer_system = timers(agent)
+        1             @test timer_system === base(agent).timers
+        1             @test timer_system isa RtcFramework.PolledTimer
+        - 
+        -             # Test that we can use it for timer operations
+        1             schedule!(timers(agent), 1_000_000_000, :TestTimer)
+        1             @test true  # If we got here, schedule! worked
+        - 
+        -             # Cancel the timer
+        1             cancel!(timers(agent), :TestTimer)
+        1             @test true  # If we got here, cancel! worked
+        -         end
+        - 
+        -         @testset "comms accessor" begin
+        -             # Test that comms(agent) returns the communication resources
+        3             comm_resources_result = comms(agent)
+        1             @test comm_resources_result === base(agent).comms
+        1             @test comm_resources_result isa RtcFramework.CommunicationResources
+        - 
+        -             # Test that we can access fields
+        1             @test comms(agent).client === client
+        -         end
+        - 
+        -         @testset "accessor type stability" begin
+        -             # Verify type stability of accessors
+        3             @test (@inferred properties(agent)) === base(agent).properties
+        1             @test (@inferred timers(agent)) === base(agent).timers
+        1             @test (@inferred comms(agent)) === base(agent).comms
+        -         end
+        - 
+        -         # Cleanup
+        1         close(comm_resources)
+        -     end
+        - end

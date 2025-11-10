@@ -1,0 +1,13 @@
+        - # Ready state handlers
+        - 
+        - @statedef AbstractRtcAgent :Ready :Top
+        - 
+       28 @on_initial function (sm::AbstractRtcAgent, ::Ready)
+       28     Hsm.transition!(sm, :Stopped)
+        - end
+        - 
+        - @on_entry function (sm::AbstractRtcAgent, ::Ready)
+        - end
+        - 
+        - @on_exit function (sm::AbstractRtcAgent, ::Ready)
+        - end

@@ -1,0 +1,89 @@
+        - """
+        - Aeron publication utility functions for proxy implementations.
+        - 
+        - Provides retry logic and error handling for Aeron publication operations.
+        - These functions are used internally by StatusProxy and PropertyProxy.
+        - """
+        - 
+        - """
+        -     try_claim(publication, length, max_attempts=10)
+        - 
+        - Try to claim a buffer from the stream with retries.
+        - Returns the claim on success, nothing if no subscribers.
+        - Throws ClaimBufferError if max attempts exceeded due to persistent back pressure.
+        - """
+     2064 function try_claim(publication, length, max_attempts=10)
+     4128     attempts = max_attempts
+     2064     while attempts > 0
+     2064         claim, result = Aeron.try_claim(publication, length)
+     2064         if result > 0
+     1919             return claim
+      145         elseif result == Aeron.PUBLICATION_BACK_PRESSURED
+        0             attempts -= 1
+        0             if attempts > 0
+        0                 continue
+        -             else
+        0                 throw(PublicationBackPressureError(
+        -                     string(publication),
+        -                     max_attempts
+        -                 ))
+        -             end
+      145         elseif result == Aeron.PUBLICATION_ADMIN_ACTION
+        0             continue
+      145         elseif result == Aeron.PUBLICATION_NOT_CONNECTED
+        -             # No subscribers connected - this is normal in some cases
+      145             return nothing
+        0         elseif result == Aeron.PUBLICATION_ERROR
+        0             Aeron.throwerror()
+        -         else
+        0             attempts -= 1
+        -         end
+        0     end
+        -     # If we reach here, we exhausted attempts due to unknown error codes
+        0     throw(ClaimBufferError(
+        -         string(publication),
+        -         length,
+        -         max_attempts
+        -     ))
+        - end
+        - 
+        - """
+        -     offer(publication, buffer, max_attempts=10)
+        - 
+        - Offer a buffer to the stream with retries.
+        - Returns nothing on success or when no subscribers (both are normal cases).
+        - Throws PublicationBackPressureError if max attempts exceeded due to persistent back pressure.
+        - """
+      404 function offer(publication, buffer, max_attempts=10)
+      808     attempts = max_attempts
+      404     while attempts > 0
+      404         result = Aeron.offer(publication, buffer)
+      404         if result > 0
+      404             return nothing
+        0         elseif result == Aeron.PUBLICATION_BACK_PRESSURED
+        0             attempts -= 1
+        0             if attempts > 0
+        0                 continue
+        -             else
+        0                 throw(PublicationBackPressureError(
+        -                     string(publication),
+        -                     max_attempts
+        -                 ))
+        -             end
+        0         elseif result == Aeron.PUBLICATION_ADMIN_ACTION
+        0             continue
+        0         elseif result == Aeron.PUBLICATION_NOT_CONNECTED
+        -             # No subscribers connected - this is normal, just return
+        0             return nothing
+        0         elseif result == Aeron.PUBLICATION_ERROR
+        0             Aeron.throwerror()
+        -         else
+        0             attempts -= 1
+        -         end
+        0     end
+        -     # If we reach here, we exhausted attempts due to unknown error codes
+        0     throw(PublicationFailureError(
+        -         string(publication),
+        -         max_attempts
+        -     ))
+        - end

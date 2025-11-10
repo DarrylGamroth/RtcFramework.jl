@@ -1,0 +1,18 @@
+        - # Playing state handlers
+        - 
+        - @statedef AbstractRtcAgent :Playing :Processing
+        - 
+        - @on_entry function (sm::AbstractRtcAgent, ::Playing)
+        - end
+        - 
+        - @on_exit function (sm::AbstractRtcAgent, ::Playing)
+        - end
+        - 
+        - @on_event function (sm::AbstractRtcAgent, ::Playing, ::Pause, _)
+        0     Hsm.transition!(sm, :Paused)
+        - end
+        - 
+        - @on_event function (agent::AbstractRtcAgent, ::Playing, ::PublishProperty, config::PublicationConfig)
+        0     publish_property(agent, config)
+        0     return Hsm.EventHandled
+        - end

@@ -1,0 +1,255 @@
+        - # Integration test suite for full agent workflows.
+        - # Tests complete agent lifecycle, property publishing workflows, and error scenarios.
+        1 function test_integration(client)
+        1     @testset "Complete Agent Lifecycle" begin
+        3         clock = CachedEpochClock(EpochClock())
+        1         properties = TestAgent.Properties(clock)
+        1         comms = CommunicationResources(client, properties)
+        1         base_agent = BaseRtcAgent(comms, properties, clock)
+        1         agent = TestAgent.RtcAgent(base_agent)
+        -         
+        -         # Test full lifecycle from creation to shutdown
+        -         # Note: RtcAgent doesn't have a public state field, test behavior instead
+        -         
+        -         # Open agent
+        1         Agent.on_start(agent)
+        1         @test base(agent).properties !== nothing
+        -         
+        -         # Test agent work processing directly (without AgentRunner threading)
+        1         work_count = Agent.do_work(agent)
+        1         @test work_count isa Int
+        -         
+        -         # Close agent
+        1         Agent.on_close(agent)
+        -     end
+        -     
+        -     @testset "Property Publishing Workflow" begin
+        3         clock = CachedEpochClock(EpochClock())
+        1         properties = TestAgent.Properties(clock)
+        1         comms = CommunicationResources(client, properties)
+        1         base_agent = BaseRtcAgent(comms, properties, clock)
+        1         agent = TestAgent.RtcAgent(base_agent)
+        1         Agent.on_start(agent)
+        -         
+        -         # Test that properties are accessible
+        1         @test base(agent).properties !== nothing
+        -         
+        -         # Test strategy processing works using Agent API
+        1         @test_nowarn Agent.do_work(agent)
+        -         
+        1         Agent.on_close(agent)
+        -     end
+        -     
+        -     @testset "Multi-Agent Scenarios" begin
+        -         # Test multiple agents can coexist
+        3         clock1 = CachedEpochClock(EpochClock())
+        1         properties1 = TestAgent.Properties(clock1)
+        1         comms1 = CommunicationResources(client, properties1)
+        1         base_agent1 = BaseRtcAgent(comms1, properties1, clock1)
+        1         agent1 = TestAgent.RtcAgent(base_agent1)
+        1         clock2 = CachedEpochClock(EpochClock())
+        1         properties2 = TestAgent.Properties(clock2)
+        1         comms2 = CommunicationResources(client, properties2)
+        1         base_agent2 = BaseRtcAgent(comms2, properties2, clock2)
+        1         agent2 = TestAgent.RtcAgent(base_agent2)
+        -         
+        1         Agent.on_start(agent1)
+        1         Agent.on_start(agent2)
+        -         
+        -         # Both agents should be independent and have properties
+        1         @test base(agent1).properties !== nothing
+        1         @test base(agent2).properties !== nothing
+        1         @test base(agent1).properties !== base(agent2).properties  # Different instances
+        -         
+        1         Agent.on_close(agent1)
+        1         Agent.on_close(agent2)
+        -     end
+        -     
+        -     @testset "Performance Validation" begin
+        2         clock = CachedEpochClock(EpochClock())
+        1         properties = TestAgent.Properties(clock)
+        1         comms = CommunicationResources(client, properties)
+        1         base_agent = BaseRtcAgent(comms, properties, clock)
+        1         agent = TestAgent.RtcAgent(base_agent)
+        1         Agent.on_start(agent)
+        -         
+        -         # Transition to Playing state for realistic performance testing
+        1         dispatch!(agent, :Play)
+        -         
+        -         @testset "Basic do_work allocation" begin
+        -             # Warm up
+        3             Agent.do_work(agent)
+        1             Agent.do_work(agent)
+        -             
+        -             # Actual measurement
+        1             allocations = @allocated Agent.do_work(agent)
+        1             @test allocations == 0  # Agent work should be allocation-free
+        -         end
+        -         
+        -         @testset "do_work with timer firing" begin
+        -             # Get the timer periods from properties
+        4             heartbeat_period_ns = base(agent).properties[:HeartbeatPeriodNs]
+        2             stats_period_ns = base(agent).properties[:StatsPeriodNs]
+        2             gc_stats_period_ns = base(agent).properties[:GCStatsPeriodNs]
+        -             
+        -             # Calculate how long we need to run to ensure all timers fire at least once
+        1             max_period_ns = max(heartbeat_period_ns, stats_period_ns, gc_stats_period_ns)
+        -             
+        -             # Warm up phase 1: Run until all timer types have fired at least once
+        -             # This ensures JIT compilation of all timer event handlers
+        1             start_time = Clocks.time_nanos(base(agent).clock)
+        1             elapsed_ns = 0
+        -             
+ 69710689             while elapsed_ns < max_period_ns * 2
+ 69710688                 Agent.do_work(agent)
+ 69710688                 Clocks.fetch!(base(agent).clock)
+ 69710688                 elapsed_ns = Clocks.time_nanos(base(agent).clock) - start_time
+ 69710688             end
+        -             
+        -             # Warm up phase 2: Run additional iterations to stabilize JIT
+        1             for _ in 1:100
+      100                 Agent.do_work(agent)
+      199             end
+        -             
+        -             # Now measure allocation with timers firing
+        -             # Run for another full period
+        1             target_duration = max_period_ns
+        1             start_time = Clocks.time_nanos(base(agent).clock)
+        1             elapsed_ns = 0
+        1             total_allocations = 0
+        1             iterations = 0
+        -             
+ 32209716             while elapsed_ns < target_duration
+ 32209715                 allocations = @allocated Agent.do_work(agent)
+ 32209715                 total_allocations += allocations
+ 32209715                 iterations += 1
+ 32209715                 Clocks.fetch!(base(agent).clock)
+ 32209715                 elapsed_ns = Clocks.time_nanos(base(agent).clock) - start_time
+ 32209715             end
+        -             
+        1             @test iterations > 0  # Sanity check that we actually ran
+        -             
+        -             # We expect zero allocations in Playing state with timers firing after JIT warmup
+        -             # Current implementation shows consistent ~7KB allocation - this is a real issue, not JIT
+        1             avg_alloc = round(total_allocations/iterations, digits=1)
+        1             println("  Timer firing: $total_allocations bytes total over $iterations iterations ($avg_alloc bytes/iteration)")
+        -             
+        1             @test_broken total_allocations == 0  # Known issue: timer handlers allocate
+        -         end
+        -         
+        -         @testset "Heartbeat timer allocation" begin
+        -             # Cancel all timers first
+        3             cancel!(timers(agent))
+        -             
+        -             # Test Heartbeat timer in isolation
+        1             schedule!(timers(agent), 0, :Heartbeat)
+        1             for _ in 1:100
+      100                 Agent.do_work(agent)
+      100                 schedule!(timers(agent), 0, :Heartbeat)
+      199             end
+        -             
+        -             # Measure single iteration
+        1             schedule!(timers(agent), 0, :Heartbeat)
+        1             heartbeat_alloc = @allocated Agent.do_work(agent)
+        1             println("  Heartbeat: $heartbeat_alloc bytes per iteration")
+        -             
+        1             @test heartbeat_alloc == 0
+        -         end
+        -         
+        -         @testset "StatsUpdate timer allocation" begin
+        3             cancel!(timers(agent))
+        -             
+        -             # Test StatsUpdate timer in isolation
+        1             schedule!(timers(agent), 0, :StatsUpdate)
+        1             for _ in 1:100
+      100                 Agent.do_work(agent)
+      100                 schedule!(timers(agent), 0, :StatsUpdate)
+      199             end
+        -             
+        -             # Measure single iteration
+        1             schedule!(timers(agent), 0, :StatsUpdate)
+        1             stats_alloc = @allocated Agent.do_work(agent)
+        1             println("  StatsUpdate: $stats_alloc bytes per iteration")
+        -             
+        1             @test stats_alloc == 0  # This should be zero-allocation
+        -         end
+        -         
+        -         @testset "GCStats timer allocation" begin
+        3             cancel!(timers(agent))
+        -             
+        -             # Test GCStats timer in isolation
+        1             schedule!(timers(agent), 0, :GCStats)
+        1             for _ in 1:100
+      100                 Agent.do_work(agent)
+      100                 schedule!(timers(agent), 0, :GCStats)
+      199             end
+        -             
+        -             # Measure single iteration
+        1             schedule!(timers(agent), 0, :GCStats)
+        1             gc_stats_alloc = @allocated Agent.do_work(agent)
+        1             println("  GCStats: $gc_stats_alloc bytes per iteration")
+        -             
+        1             @test_broken gc_stats_alloc == 0  # Known: Base.gc_num() allocates
+        -         end
+        -         
+        -         @testset "Poller registration/unregistration allocation" begin
+        -             # Test that pollers work correctly and don't allocate after registration
+        3             custom_poller_call_count = Ref(0)
+        1             function custom_poller(agent)
+       12                 custom_poller_call_count[] += 1
+       12                 return 1  # Report 1 work item
+        -             end
+        -             
+        -             # Warm up to stabilize JIT
+        1             for _ in 1:10
+       10                 Agent.do_work(agent)
+       19             end
+        -             
+        -             # Register custom poller - registration is deferred and applied during apply!()
+        1             register!(custom_poller, pollers(agent), :custom_test, 100)
+        -             
+        -             # do_work calls poll() which executes pollers THEN calls apply!()
+        -             # So the first do_work after registration will NOT call the poller yet
+        -             # because apply! happens after polling
+        1             initial_count = custom_poller_call_count[]
+        1             @test initial_count == 0
+        -             
+        1             Agent.do_work(agent)  # This applies the registration but doesn't call it
+        1             @test custom_poller_call_count[] == 0  # Not called yet
+        -             
+        -             # Second do_work will call the poller since it's now registered
+        1             Agent.do_work(agent)
+        1             @test custom_poller_call_count[] == 1  # Now it should be called
+        -             
+        -             # After registration is applied, subsequent calls should not allocate
+        -             # Run a few times to verify consistent zero allocation
+        1             allocation_warned = false
+        1             for _ in 1:5
+        5                 Agent.do_work(agent)
+        5                 allocations = @allocated Agent.do_work(agent)
+        5                 if allocations > 0 && !allocation_warned
+        1                     @warn "Poller execution allocated $allocations bytes (ideally should be 0)"
+        1                     allocation_warned = true
+        -                 end
+        9             end
+        -             
+        -             # Verify poller has been called multiple times
+        1             @test custom_poller_call_count[] > 5
+        -             
+        -             # Unregister - this is also deferred
+        1             unregister!(pollers(agent), :custom_test)
+        -             
+        -             # One do_work to apply the unregistration (but poller still called during this one)
+        1             pre_unreg_count = custom_poller_call_count[]
+        1             Agent.do_work(agent)  # Poller runs, THEN unregister is applied
+        -             
+        -             # Now poller should not be called anymore
+        1             post_apply_count = custom_poller_call_count[]
+        1             Agent.do_work(agent)
+        1             Agent.do_work(agent)
+        1             @test custom_poller_call_count[] == post_apply_count  # No new calls
+        -         end
+        -         
+        1         Agent.on_close(agent)
+        -     end
+        - end

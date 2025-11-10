@@ -1,0 +1,195 @@
+        - """
+        -     StatusProxy
+        - 
+        - Proxy for publishing events and state changes to the status stream.
+        - 
+        - Contains minimal components needed for Aeron message publishing with SBE encoding.
+        - The `position_ptr` enables efficient buffer positioning during encoding operations.
+        - 
+        - # Fields
+        - - `position_ptr::Base.RefValue{Int64}`: current buffer position for SBE encoding
+        - - `publication::Aeron.ExclusivePublication`: dedicated Aeron publication stream
+        - - `buffer::Vector{UInt8}`: reusable buffer for message construction
+        - """
+        - struct StatusProxy
+        -     position_ptr::Base.RefValue{Int64}
+        -     publication::Aeron.ExclusivePublication
+        -     buffer::Vector{UInt8}
+        -     function StatusProxy(publication::Aeron.ExclusivePublication)
+       31         new(Ref{Int64}(0), publication, zeros(UInt8, 512))
+        -     end
+        - end
+        - 
+        - """
+        -     publish_status_event(proxy, field, value, tag, correlation_id, timestamp_ns)
+        - 
+        - Publish an event to the status stream with SBE encoding.
+        - 
+        - Handles buffer claiming, message encoding, and publication to Aeron stream.
+        - Returns `nothing` on success or when no subscribers are present.
+        - """
+     1256 function publish_status_event(
+        -     proxy::StatusProxy,
+        -     field::Symbol,
+        -     value::T,
+        -     tag::AbstractString,
+        -     correlation_id::Int64,
+        -     timestamp_ns::Int64) where {T<:Union{AbstractString,Char,Nothing,Real,Symbol,Tuple}}
+        - 
+        -     # Calculate buffer length needed
+     1256     len = sbe_encoded_length(MessageHeader) +
+        -           sbe_block_length(EventMessage) +
+        -           SpidersMessageCodecs.value_header_length(EventMessage) +
+        -           sizeof(value)
+        - 
+        -     # Try to claim the buffer
+     1256     claim = try_claim(proxy.publication, len)
+        - 
+        -     # If claiming the buffer fails, return early
+     2367     isnothing(claim) && return
+        - 
+        -     # Create the message encoder
+     1111     encoder = EventMessageEncoder(Aeron.buffer(claim); position_ptr=proxy.position_ptr)
+     1111     header = SpidersMessageCodecs.header(encoder)
+        - 
+        -     # Fill in the message
+     1111     SpidersMessageCodecs.timestampNs!(header, timestamp_ns)
+     1111     SpidersMessageCodecs.correlationId!(header, correlation_id)
+    35552     SpidersMessageCodecs.tag!(header, tag)
+     1111     SpidersMessageCodecs.format!(encoder, convert(SpidersMessageCodecs.Format.SbeEnum, T))
+    35552     SpidersMessageCodecs.key!(encoder, field)
+     1919     SpidersMessageCodecs.value!(encoder, value)
+        - 
+        -     # Commit the message
+     1111     Aeron.commit(claim)
+        - 
+     1111     nothing
+        - end
+        - 
+        - function publish_status_event(
+        -     proxy::StatusProxy,
+        -     field::Symbol,
+        -     value::T,
+        -     tag::AbstractString,
+        -     correlation_id::Int64,
+        -     timestamp_ns::Int64) where {T<:Exception}
+        - 
+        -     msg = string(value)
+        -     len = sizeof(msg)
+        - 
+        -     # Create the message encoder
+        -     encoder = EventMessageEncoder(proxy.buffer; position_ptr=proxy.position_ptr)
+        -     header = SpidersMessageCodecs.header(encoder)
+        - 
+        -     # Fill in the message
+        -     SpidersMessageCodecs.timestampNs!(header, timestamp_ns)
+        -     SpidersMessageCodecs.correlationId!(header, correlation_id)
+        -     SpidersMessageCodecs.tag!(header, tag)
+        -     SpidersMessageCodecs.format!(encoder, convert(SpidersMessageCodecs.Format.SbeEnum, String))
+        -     SpidersMessageCodecs.key!(encoder, field)
+        -     @inbounds SpidersMessageCodecs.value_length!(encoder, len)
+        -     # value_length! doesn't increment the position, so we need to do it manually
+        -     SpidersMessageCodecs.sbe_position!(encoder, sbe_position(encoder) + SpidersMessageCodecs.value_header_length(encoder))
+        -     event_message = convert(AbstractArray{UInt8}, encoder)
+        - 
+        -     # Offer in the correct order
+        -     offer(proxy.publication,
+        -         (
+        -             event_message,
+        -             codeunits(msg)
+        -         )
+        -     )
+        - 
+        -     nothing
+        - end
+        - 
+        - """
+        -     publish_status_event(proxy, field, value::AbstractArray, tag, correlation_id, timestamp_ns)
+        - 
+        - Publish an array event to the status stream with SBE tensor encoding.
+        - 
+        - Uses tensor message format for efficient array data transmission.
+        - """
+      202 function publish_status_event(
+        -     proxy::StatusProxy,
+        -     field::Symbol,
+        -     value::T,
+        -     tag::AbstractString,
+        -     correlation_id::Int64,
+        -     timestamp_ns::Int64) where {T<:AbstractArray}
+        - 
+        -     # Encode the buffer headers in reverse order
+        - 
+        -     # Calculate array data length
+      202     len = sizeof(eltype(value)) * length(value)
+        - 
+        -     # Create tensor message
+      202     tensor = TensorMessageEncoder(proxy.buffer; position_ptr=proxy.position_ptr)
+      202     header = SpidersMessageCodecs.header(tensor)
+      202     SpidersMessageCodecs.timestampNs!(header, timestamp_ns)
+      202     SpidersMessageCodecs.correlationId!(header, correlation_id)
+     6464     SpidersMessageCodecs.tag!(header, tag)
+      202     SpidersMessageCodecs.format!(tensor, convert(SpidersMessageCodecs.Format.SbeEnum, eltype(value)))
+      202     SpidersMessageCodecs.majorOrder!(tensor, SpidersMessageCodecs.MajorOrder.COLUMN)
+      404     SpidersMessageCodecs.dims!(tensor, Int32.(size(value)))
+      202     SpidersMessageCodecs.origin!(tensor, nothing)
+      202     @inbounds SpidersMessageCodecs.values_length!(tensor, len)
+      202     SpidersMessageCodecs.sbe_position!(tensor, sbe_position(tensor) + SpidersMessageCodecs.values_header_length(tensor))
+      202     tensor_message = convert(AbstractArray{UInt8}, tensor)
+      202     len += length(tensor_message)
+        - 
+      202     event = EventMessageEncoder(proxy.buffer, sbe_position(tensor); position_ptr=proxy.position_ptr)
+      202     header = SpidersMessageCodecs.header(event)
+      202     SpidersMessageCodecs.timestampNs!(header, timestamp_ns)
+      202     SpidersMessageCodecs.correlationId!(header, correlation_id)
+     6464     SpidersMessageCodecs.tag!(header, tag)
+      202     SpidersMessageCodecs.format!(event, SpidersMessageCodecs.Format.SBE)
+     6464     SpidersMessageCodecs.key!(event, field)
+      202     @inbounds SpidersMessageCodecs.value_length!(event, len)
+        -     # value_length! doesn't increment the position, so we need to do it manually
+      202     SpidersMessageCodecs.sbe_position!(event, sbe_position(event) + SpidersMessageCodecs.value_header_length(event))
+      202     event_message = convert(AbstractArray{UInt8}, event)
+        - 
+        -     # Offer in the correct order
+      202     offer(proxy.publication,
+        -         (
+        -             event_message,
+        -             tensor_message,
+        -             vec(reinterpret(UInt8, value))
+        -         )
+        -     )
+        - 
+      202     nothing
+        - end
+        - 
+        - function publish_status_event(
+        -     proxy::StatusProxy,
+        -     field::Symbol,
+        -     value,
+        -     tag::AbstractString,
+        -     correlation_id::Int64,
+        -     timestamp_ns::Int64)
+        -     throw(ArgumentError("Unsupported value type for status event: $(typeof(value))"))
+        - end
+        - 
+        - """
+        -     publish_state_change(proxy, new_state, tag, correlation_id, timestamp_ns)
+        - 
+        - Publish a state change event using the status proxy.
+        - 
+        - Convenience function that publishes a `:StateChange` event with the new state value.
+        - """
+        - function publish_state_change(proxy::StatusProxy, new_state::Symbol, tag::String, correlation_id::Int64, timestamp_ns::Int64)
+      130     return publish_status_event(proxy, :StateChange, new_state, tag, correlation_id, timestamp_ns)
+        - end
+        - 
+        - """
+        -     publish_event_response(proxy, event, value, tag, correlation_id, timestamp_ns)
+        - 
+        - Publish an event response using the status proxy.
+        - 
+        - Used to respond to control events with result data or acknowledgments.
+        - """
+        - function publish_event_response(proxy::StatusProxy, event::Symbol, value, tag::String, correlation_id::Int64, timestamp_ns::Int64)
+      520     return publish_status_event(proxy, event, value, tag, correlation_id, timestamp_ns)
+        - end

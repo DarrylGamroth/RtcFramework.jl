@@ -1,0 +1,10 @@
+        - # Exit state handlers
+        - 
+        - @statedef AbstractRtcAgent :Exit
+        - 
+        9 @on_entry function (sm::AbstractRtcAgent, ::Exit)
+        9     throw(AgentTerminationException())
+        - end
+        - 
+        - @on_exit function (sm::AbstractRtcAgent, ::Exit)
+        - end

@@ -1,0 +1,51 @@
+        - """
+        - Test suite for Timer system functionality.
+        - Tests timer scheduling, cancellation, and polling.
+        - """
+        1 function test_timers(client)
+        1     @testset "Timer Basic Operations" begin
+        3         clock = CachedEpochClock(EpochClock())
+        1         timers = PolledTimer(clock)
+        -         
+        -         # Test initial state
+        1         @test length(timers) == 0
+        1         @test isempty(timers)
+        -         
+        -         # Test timer scheduling
+        1         timer_id = schedule!(timers, 1_000_000, :TestEvent)
+        1         @test timer_id > 0
+        1         @test length(timers) == 1
+        1         @test !isempty(timers)
+        -         
+        -         # Test timer cancellation
+        1         cancel!(timers, timer_id)
+        1         @test length(timers) == 0
+        1         @test isempty(timers)
+        -     end
+        -     
+        -     @testset "Timer Integration with Agent" begin
+        2         clock = CachedEpochClock(EpochClock())
+        1         properties = TestAgent.Properties(clock)
+        1         comms = CommunicationResources(client, properties)
+        1         base_agent = BaseRtcAgent(comms, properties, clock)
+        1         agent = TestAgent.RtcAgent(base_agent)
+        -         
+        -         # Initialize the agent to set up proxies
+        1         Agent.on_start(agent)
+        -         
+        -         # Test that agent has timer system
+        2         @test !isnothing(base(agent).timers)
+        1         @test base(agent).timers isa PolledTimer
+        -         
+        -         # Test timer polling (should not error)
+        1         @test_nowarn RtcFramework.timer_poller(agent)
+        -         
+        -         # Clean up
+        1         Agent.on_close(agent)
+        -     end
+        -     
+        -     # Additional timer tests would go here
+        -     # - Timer firing tests (with clock mocking)
+        -     # - Multiple timer management
+        -     # - Timer event dispatch integration
+        - end

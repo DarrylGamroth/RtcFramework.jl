@@ -1,0 +1,253 @@
+        - module test_proxy_allocations
+        - 
+        - using Test
+        - using RtcFramework
+        - using Aeron
+        - using SpidersMessageCodecs
+        - 
+        - # Helper to create a test status proxy with subscriber
+        - function create_test_status_proxy(client::Aeron.Client)
+        3     pub = Aeron.add_exclusive_publication(client, "aeron:ipc", 1001)
+        -     # Add subscriber so try_claim will work
+        3     sub = Aeron.add_subscription(client, "aeron:ipc", 1001)
+        3     RtcFramework.StatusProxy(pub), sub
+        - end
+        - 
+        - # Helper to create a test property proxy with subscribers
+        2 function create_test_property_proxy(client::Aeron.Client)
+        2     pub1 = Aeron.add_exclusive_publication(client, "aeron:ipc", 2001)
+        2     pub2 = Aeron.add_exclusive_publication(client, "aeron:ipc", 2002)
+        -     # Add subscribers so try_claim will work
+        2     sub1 = Aeron.add_subscription(client, "aeron:ipc", 2001)
+        2     sub2 = Aeron.add_subscription(client, "aeron:ipc", 2002)
+        2     RtcFramework.PropertyProxy([pub1, pub2]), (sub1, sub2)
+        - end
+        - 
+        1 function run_tests(client::Aeron.Client)
+        1     @testset "StatusProxy - publish_status_event" begin
+        3         proxy, sub = create_test_status_proxy(client)
+        -         
+        -         # Test Int64
+        -         @testset "Int64 values" begin
+        -             # Warm up
+        3             for _ in 1:100
+      100                 RtcFramework.publish_status_event(proxy, :test, 42, "tag", 1, 1000)
+      199             end
+        1             alloc = @allocated RtcFramework.publish_status_event(proxy, :test, 42, "tag", 1, 1000)
+        1             @test alloc == 0
+        -         end
+        -         
+        -         # Test Float64
+        -         @testset "Float64 values" begin
+        3             for _ in 1:100
+      100                 RtcFramework.publish_status_event(proxy, :test, 3.14, "tag", 1, 1000)
+      199             end
+        1             alloc = @allocated RtcFramework.publish_status_event(proxy, :test, 3.14, "tag", 1, 1000)
+        1             @test alloc == 0
+        -         end
+        -         
+        -         # Test Symbol
+        -         @testset "Symbol values" begin
+        3             for _ in 1:100
+      100                 RtcFramework.publish_status_event(proxy, :test, :symbol, "tag", 1, 1000)
+      199             end
+        1             alloc = @allocated RtcFramework.publish_status_event(proxy, :test, :symbol, "tag", 1, 1000)
+        1             @test alloc == 0
+        -         end
+        -         
+        -         # Test Bool
+        -         @testset "Bool values" begin
+        3             for _ in 1:100
+      100                 RtcFramework.publish_status_event(proxy, :test, true, "tag", 1, 1000)
+      199             end
+        1             alloc = @allocated RtcFramework.publish_status_event(proxy, :test, true, "tag", 1, 1000)
+        1             @test alloc == 0
+        -         end
+        -         
+        -         # Test Nothing
+        -         @testset "Nothing values" begin
+        3             for _ in 1:100
+      100                 RtcFramework.publish_status_event(proxy, :test, nothing, "tag", 1, 1000)
+      199             end
+        1             alloc = @allocated RtcFramework.publish_status_event(proxy, :test, nothing, "tag", 1, 1000)
+        1             @test alloc == 0
+        -         end
+        -         
+        -         # Test String - actually zero-allocation!
+        -         @testset "String values" begin
+        3             for _ in 1:100
+      100                 RtcFramework.publish_status_event(proxy, :test, "hello", "tag", 1, 1000)
+      199             end
+        1             alloc = @allocated RtcFramework.publish_status_event(proxy, :test, "hello", "tag", 1, 1000)
+        1             @test alloc == 0
+        -         end
+        -         
+        -         # Test Array{Int64} - actually zero-allocation!
+        -         @testset "Array{Int64} values" begin
+        7             arr = [1, 2, 3, 4, 5]
+        1             for _ in 1:100
+      100                 RtcFramework.publish_status_event(proxy, :test, arr, "tag", 1, 1000)
+      199             end
+        1             alloc = @allocated RtcFramework.publish_status_event(proxy, :test, arr, "tag", 1, 1000)
+        1             @test alloc == 0
+        -         end
+        -         
+        -         # Test Array{Float64} - actually zero-allocation!
+        -         @testset "Array{Float64} values" begin
+        7             arr = [1.0, 2.0, 3.0, 4.0, 5.0]
+        1             for _ in 1:100
+      100                 RtcFramework.publish_status_event(proxy, :test, arr, "tag", 1, 1000)
+      199             end
+        1             alloc = @allocated RtcFramework.publish_status_event(proxy, :test, arr, "tag", 1, 1000)
+        1             @test alloc == 0
+        -         end
+        -     end
+        -     
+        -     @testset "StatusProxy - publish_state_change" begin
+        3         proxy, sub = create_test_status_proxy(client)
+        -         
+        1         for _ in 1:100
+      100             RtcFramework.publish_state_change(proxy, :Playing, "tag", 1, 1000)
+      199         end
+        1         alloc = @allocated RtcFramework.publish_state_change(proxy, :Playing, "tag", 1, 1000)
+        1         @test alloc == 0
+        -     end
+        -     
+        -     @testset "StatusProxy - publish_event_response" begin
+        3         proxy, sub = create_test_status_proxy(client)
+        -         
+        -         # Test with Bool
+        -         @testset "Bool response" begin
+        3             for _ in 1:100
+      100                 RtcFramework.publish_event_response(proxy, :Heartbeat, true, "tag", 1, 1000)
+      199             end
+        1             alloc = @allocated RtcFramework.publish_event_response(proxy, :Heartbeat, true, "tag", 1, 1000)
+        1             @test alloc == 0
+        -         end
+        -         
+        -         # Test with Int
+        -         @testset "Int response" begin
+        3             for _ in 1:100
+      100                 RtcFramework.publish_event_response(proxy, :Heartbeat, 42, "tag", 1, 1000)
+      199             end
+        1             alloc = @allocated RtcFramework.publish_event_response(proxy, :Heartbeat, 42, "tag", 1, 1000)
+        1             @test alloc == 0
+        -         end
+        -         
+        -         # Test with Symbol
+        -         @testset "Symbol response" begin
+        3             for _ in 1:100
+      100                 RtcFramework.publish_event_response(proxy, :Heartbeat, :ok, "tag", 1, 1000)
+      199             end
+        1             alloc = @allocated RtcFramework.publish_event_response(proxy, :Heartbeat, :ok, "tag", 1, 1000)
+        1             @test alloc == 0
+        -         end
+        -         
+        -         # Test with Float64
+        -         @testset "Float64 response" begin
+        3             for _ in 1:100
+      100                 RtcFramework.publish_event_response(proxy, :Heartbeat, 3.14, "tag", 1, 1000)
+      199             end
+        1             alloc = @allocated RtcFramework.publish_event_response(proxy, :Heartbeat, 3.14, "tag", 1, 1000)
+        1             @test alloc == 0
+        -         end
+        -     end
+        -     
+        -     @testset "PropertyProxy - publish_property" begin
+        3         proxy, subs = create_test_property_proxy(client)
+        -         
+        -         # Test Int64
+        -         @testset "Int64 values" begin
+        3             for _ in 1:100
+      100                 RtcFramework.publish_property(proxy, 1, :test, 42, "tag", 1, 1000)
+      199             end
+        1             alloc = @allocated RtcFramework.publish_property(proxy, 1, :test, 42, "tag", 1, 1000)
+        1             @test alloc == 0
+        -         end
+        -         
+        -         # Test Float64
+        -         @testset "Float64 values" begin
+        3             for _ in 1:100
+      100                 RtcFramework.publish_property(proxy, 1, :test, 3.14, "tag", 1, 1000)
+      199             end
+        1             alloc = @allocated RtcFramework.publish_property(proxy, 1, :test, 3.14, "tag", 1, 1000)
+        1             @test alloc == 0
+        -         end
+        -         
+        -         # Test Symbol
+        -         @testset "Symbol values" begin
+        3             for _ in 1:100
+      100                 RtcFramework.publish_property(proxy, 1, :test, :symbol, "tag", 1, 1000)
+      199             end
+        1             alloc = @allocated RtcFramework.publish_property(proxy, 1, :test, :symbol, "tag", 1, 1000)
+        1             @test alloc == 0
+        -         end
+        -         
+        -         # Test Bool
+        -         @testset "Bool values" begin
+        3             for _ in 1:100
+      100                 RtcFramework.publish_property(proxy, 1, :test, true, "tag", 1, 1000)
+      199             end
+        1             alloc = @allocated RtcFramework.publish_property(proxy, 1, :test, true, "tag", 1, 1000)
+        1             @test alloc == 0
+        -         end
+        -         
+        -         # Test Nothing
+        -         @testset "Nothing values" begin
+        3             for _ in 1:100
+      100                 RtcFramework.publish_property(proxy, 1, :test, nothing, "tag", 1, 1000)
+      199             end
+        1             alloc = @allocated RtcFramework.publish_property(proxy, 1, :test, nothing, "tag", 1, 1000)
+        1             @test alloc == 0
+        -         end
+        -         
+        -         # Test String - actually zero-allocation!
+        -         @testset "String values" begin
+        3             for _ in 1:100
+      100                 RtcFramework.publish_property(proxy, 1, :test, "hello", "tag", 1, 1000)
+      199             end
+        1             alloc = @allocated RtcFramework.publish_property(proxy, 1, :test, "hello", "tag", 1, 1000)
+        1             @test alloc == 0
+        -         end
+        -         
+        -         # Test Array{Int64} - actually zero-allocation!
+        -         @testset "Array{Int64} values" begin
+        7             arr = [1, 2, 3, 4, 5]
+        1             for _ in 1:100
+      100                 RtcFramework.publish_property(proxy, 1, :test, arr, "tag", 1, 1000)
+      199             end
+        1             alloc = @allocated RtcFramework.publish_property(proxy, 1, :test, arr, "tag", 1, 1000)
+        1             @test alloc == 0
+        -         end
+        -         
+        -         # Test Array{Float64} - actually zero-allocation!
+        -         @testset "Array{Float64} values" begin
+        7             arr = [1.0, 2.0, 3.0, 4.0, 5.0]
+        1             for _ in 1:100
+      100                 RtcFramework.publish_property(proxy, 1, :test, arr, "tag", 1, 1000)
+      199             end
+        1             alloc = @allocated RtcFramework.publish_property(proxy, 1, :test, arr, "tag", 1, 1000)
+        1             @test alloc == 0
+        -         end
+        -     end
+        -     
+        -     @testset "PropertyProxy - Multiple streams" begin
+        2         proxy, subs = create_test_property_proxy(client)
+        -         
+        -         # Warm up both streams
+        1         for _ in 1:100
+      100             RtcFramework.publish_property(proxy, 1, :test, 42, "tag", 1, 1000)
+      100             RtcFramework.publish_property(proxy, 2, :test, 42, "tag", 1, 1000)
+      199         end
+        -         
+        -         # Test stream 1
+        1         alloc1 = @allocated RtcFramework.publish_property(proxy, 1, :test, 42, "tag", 1, 1000)
+        1         @test alloc1 == 0
+        -         
+        -         # Test stream 2
+        1         alloc2 = @allocated RtcFramework.publish_property(proxy, 2, :test, 42, "tag", 1, 1000)
+        1         @test alloc2 == 0
+        -     end
+        - end
+        - 
+        - end # module test_proxy_allocations

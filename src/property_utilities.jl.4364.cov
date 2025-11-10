@@ -1,0 +1,334 @@
+        - """
+        - Property system utilities for RTC framework.
+        - 
+        - Provides the @base_properties macro for generating standard RTC service properties
+        - with dynamic URI/stream configuration from environment variables.
+        - """
+        - 
+        - """
+        -     GCStats
+        - 
+        - Wrapper struct for Base.GC_Num with abbreviated field names to fit SBE constraints.
+        - Field names are shortened from Base.GC_Num to stay within SBE key field length limits.
+        - """
+        - struct GCStats
+      113     GcAllocd::Int64
+        -     GcDeferredAlloc::Int64
+        -     GcFreed::Int64
+        -     GcMalloc::Int64
+        -     GcRealloc::Int64
+        -     GcPoolalloc::Int64
+        -     GcBigalloc::Int64
+        -     GcFreecall::Int64
+        -     GcTotalTime::Int64
+        -     GcTotalAllocd::Int64
+        -     GcCollect::UInt64
+        -     GcPause::Int32
+        -     GcFullSweep::Int32
+        -     GcMaxPause::Int64
+        -     GcMaxMemory::Int64
+        -     GcTimeToSafepoint::Int64
+        -     GcMaxTimeToSafepoint::Int64
+        -     GcTotalTimeToSafepoint::Int64
+        -     GcSweepTime::Int64
+        -     GcMarkTime::Int64
+        -     GcStackPoolSweepTime::Int64
+        -     GcTotalSweepTime::Int64
+        -     GcTotalSweepPageWalkTime::Int64
+        -     GcTotalSweepMadviseTime::Int64
+        -     GcTotalSweepFreeMallocTime::Int64  # was: total_sweep_free_mallocd_memory_time
+        -     GcTotalMarkTime::Int64
+        -     GcTotalStackPoolSweepTime::Int64
+        -     GcLastFullSweep::Int64
+        -     GcLastIncrementalSweep::Int64
+        - end
+        - 
+        - """
+        -     GCStats(gc_num::Base.GC_Num)
+        - 
+        - Convert Base.GC_Num to GCStats with abbreviated field names.
+        - """
+        - function GCStats(gc_num::Base.GC_Num)
+      113     GCStats(
+        -         gc_num.allocd,
+        -         gc_num.deferred_alloc,
+        -         gc_num.freed,
+        -         gc_num.malloc,
+        -         gc_num.realloc,
+        -         gc_num.poolalloc,
+        -         gc_num.bigalloc,
+        -         gc_num.freecall,
+        -         gc_num.total_time,
+        -         gc_num.total_allocd,
+        -         gc_num.collect,
+        -         gc_num.pause,
+        -         gc_num.full_sweep,
+        -         gc_num.max_pause,
+        -         gc_num.max_memory,
+        -         gc_num.time_to_safepoint,
+        -         gc_num.max_time_to_safepoint,
+        -         gc_num.total_time_to_safepoint,
+        -         gc_num.sweep_time,
+        -         gc_num.mark_time,
+        -         gc_num.stack_pool_sweep_time,
+        -         gc_num.total_sweep_time,
+        -         gc_num.total_sweep_page_walk_time,
+        -         gc_num.total_sweep_madvise_time,
+        -         gc_num.total_sweep_free_mallocd_memory_time,
+        -         gc_num.total_mark_time,
+        -         gc_num.total_stack_pool_sweep_time,
+        -         gc_num.last_full_sweep,
+        -         gc_num.last_incremental_sweep
+        -     )
+        - end
+        - 
+        - """
+        -     @base_properties
+        - 
+        - Generate all standard RTC framework properties that every service needs.
+        - 
+        - This macro expands to include:
+        - - Service identity: Name, NodeId
+        - - Communication config: StatusURI/StreamID, ControlURI/StreamID/Filter
+        - - Timing config: HeartbeatPeriodNs, LateMessageThresholdNs
+        - - Runtime management: LogLevel, GCBytes, GCEnable, GCLogging
+        - - Dynamic data streams: Generated from SUB_DATA_URI_* and PUB_DATA_URI_* environment variables
+        - 
+        - Services should use this macro in their @kvstore property definition and add
+        - only service-specific properties afterward.
+        - 
+        - # Example
+        - ```julia
+        - @kvstore MyServiceProperties begin
+        -     @base_properties
+        - 
+        -     # Service-specific properties only
+        -     Temperature::Float32 => (0.0f0;)
+        -     Threshold::Float32 => (100.0f0;)
+        - end
+        - ```
+        - """
+        1 macro base_properties()
+        -     # Generate SUB_DATA_URI keys inline
+        1     sub_keys = []
+        1     sub_connection_count = 0
+        - 
+        1     for (key, value) in ENV
+      163         if startswith(key, "SUB_DATA_URI_")
+        0             sub_connection_count += 1
+        0             idx = parse(Int, replace(key, "SUB_DATA_URI_" => ""))
+        0             uri_field = Symbol("SubDataURI$(idx)")
+        0             stream_field = Symbol("SubDataStreamID$(idx)")
+        - 
+        0             push!(sub_keys, :(
+        -                 $uri_field::String => (
+        -                     $value;
+        -                     access = AccessMode.READABLE
+        -                 )
+        -             ))
+        - 
+        0             stream_key = "SUB_DATA_STREAM_$(idx)"
+        0             if haskey(ENV, stream_key)
+        0                 stream_value = parse(Int, ENV[stream_key])
+        0                 push!(sub_keys, :(
+        -                     $stream_field::Int64 => (
+        -                         $stream_value;
+        -                         access = AccessMode.READABLE
+        -                     )
+        -                 ))
+        -             end
+        -         end
+      163     end
+        - 
+        1     push!(sub_keys, :(
+        -         SubDataConnectionCount::Int64 => (
+        -             $sub_connection_count;
+        -             access = AccessMode.READABLE
+        -         )
+        -     ))
+        - 
+        -     # Generate PUB_DATA_URI keys inline
+        1     pub_keys = []
+        1     pub_connection_count = 0
+        - 
+        1     for (key, value) in ENV
+      163         if startswith(key, "PUB_DATA_URI_")
+        0             pub_connection_count += 1
+        0             idx = parse(Int, replace(key, "PUB_DATA_URI_" => ""))
+        0             uri_field = Symbol("PubDataURI$(idx)")
+        0             stream_field = Symbol("PubDataStreamID$(idx)")
+        - 
+        0             push!(pub_keys, :(
+        -                 $uri_field::String => (
+        -                     $value;
+        -                     access = AccessMode.READABLE
+        -                 )
+        -             ))
+        - 
+        0             stream_key = "PUB_DATA_STREAM_$(idx)"
+        0             if haskey(ENV, stream_key)
+        0                 stream_value = parse(Int, ENV[stream_key])
+        0                 push!(pub_keys, :(
+        -                     $stream_field::Int64 => (
+        -                         $stream_value;
+        -                         access = AccessMode.READABLE
+        -                     )
+        -                 ))
+        -             end
+        -         end
+      163     end
+        - 
+        1     push!(pub_keys, :(
+        -         PubDataConnectionCount::Int64 => (
+        -             $pub_connection_count;
+        -             access = AccessMode.READABLE
+        -         )
+        -     ))
+        - 
+        -     # Generate GC statistics fields as individual properties using GCStats struct
+        1     gc_keys = []
+        1     for fname in fieldnames(RtcFramework.GCStats)
+       29         field_type = fieldtype(RtcFramework.GCStats, fname)
+       29         default_val = zero(field_type)
+       29         push!(gc_keys, :(
+        -             $fname::$field_type => $default_val
+        -         ))
+       29     end
+        - 
+        -     # Generate performance counter properties (mirroring Counters struct fields)
+        1     counter_keys = []
+        1     for fname in fieldnames(RtcFramework.Counters)
+        -         # Convert snake_case to PascalCase: duty_cycles -> DutyCycles
+        4         name_parts = split(string(fname), '_')
+        4         pascal_name = join([uppercasefirst(part) for part in name_parts])
+        4         prop_name = Symbol(pascal_name)
+        - 
+        4         push!(counter_keys, :(
+        -             $prop_name::Int64 => (0; access = AccessMode.READABLE)
+        -         ))
+        4     end
+        - 
+        1     return esc(quote
+        -         # =============================================================================
+        -         # Service Identity
+        -         # =============================================================================
+        -         Name::String => (
+        -             get(ENV, "BLOCK_NAME") do
+        0                 throw(RtcFramework.EnvironmentVariableError("BLOCK_NAME"))
+        -             end;
+        -             access = AccessMode.READABLE
+        -         )
+        -         NodeId::Int64 => (
+        -             parse(Int64, get(ENV, "BLOCK_ID") do
+        0                 throw(RtcFramework.EnvironmentVariableError("BLOCK_ID"))
+        -             end);
+        -             access = AccessMode.READABLE
+        -         )
+        - 
+        -         # =============================================================================
+        -         # Communication Configuration
+        -         # =============================================================================
+        -         StatusURI::String => (
+        -             get(ENV, "STATUS_URI") do
+        0                 throw(RtcFramework.EnvironmentVariableError("STATUS_URI"))
+        -             end;
+        -             access = AccessMode.READABLE
+        -         )
+        -         StatusStreamID::Int64 => (
+        -             parse(Int64, get(ENV, "STATUS_STREAM_ID") do
+        0                 throw(RtcFramework.EnvironmentVariableError("STATUS_STREAM_ID"))
+        -             end);
+        -             access = AccessMode.READABLE
+        -         )
+        -         ControlURI::String => (
+        -             get(ENV, "CONTROL_URI") do
+        0                 throw(RtcFramework.EnvironmentVariableError("CONTROL_URI"))
+        -             end;
+        -             access = AccessMode.READABLE
+        -         )
+        -         ControlStreamID::Int64 => (
+        -             parse(Int64, get(ENV, "CONTROL_STREAM_ID") do
+        0                 throw(RtcFramework.EnvironmentVariableError("CONTROL_STREAM_ID"))
+        -             end);
+        -             access = AccessMode.READABLE
+        -         )
+        -         ControlFilter::String => (
+        -             get(ENV, "CONTROL_FILTER", nothing);
+        -             access = AccessMode.READABLE
+        -         )
+        - 
+        -         # Dynamic data streams (from environment variables)
+        -         $(sub_keys...)
+        -         $(pub_keys...)
+        - 
+        -         # =============================================================================
+        -         # Timing Configuration
+        -         # =============================================================================
+        -         HeartbeatPeriodNs::Int64 => (
+        -             parse(Int64, get(ENV, "HEARTBEAT_PERIOD_NS", "10000000000"))
+        -         )
+        -         LateMessageThresholdNs::Int64 => (
+        -             parse(Int64, get(ENV, "LATE_MESSAGE_THRESHOLD_NS", "1000000000"));
+        -             access = AccessMode.READABLE
+        -         )
+        -         StatsPeriodNs::Int64 => (
+        -             parse(Int64, get(ENV, "STATS_PERIOD_NS", "5000000000"))
+        -         )
+        -         GCStatsPeriodNs::Int64 => (
+        -             parse(Int64, get(ENV, "GC_STATS_PERIOD_NS", "10000000000"))
+        -         )
+        - 
+        -         # =============================================================================
+        -         # Runtime Management
+        -         # =============================================================================
+        -         LogLevel::Symbol => (
+        -             Symbol(get(ENV, "LOG_LEVEL", "Debug"));
+       35             on_set = (obj, name, val) -> begin
+       35                 if !isdefined(Logging, val)
+        0                     throw(ArgumentError("Invalid log level: $val"))
+        -                 end
+        - 
+       35                 level = getfield(Logging, val)
+       35                 Logging.disable_logging(level)
+        - 
+       35                 return val
+        -             end
+        -         )
+        -         TriggerGC::Bool => (
+        -             false;
+        -             access = AccessMode.WRITABLE,
+       35             on_set=(obj, name, val) -> (GC.gc(val); val),
+        -         )
+        -         GCEnable::Bool => (
+        -             true;
+       35             on_set=(obj, name, val) -> (GC.enable(val); val),
+        -         )
+        -         GCLogging::Bool => (
+        -             parse(Bool, get(ENV, "GC_LOGGING", "false"));
+       35             on_set=(obj, name, val) -> (GC.enable_logging(val); val),
+        0             on_get=(obj, name, val) -> GC.logging_enabled()
+        -         )
+        - 
+        -         # =============================================================================
+        -         # Performance Counters (mirrored from Aeron counters)
+        -         # =============================================================================
+        -         $(counter_keys...)
+        - 
+        -         # =============================================================================
+        -         # Derived Performance Metrics
+        -         # =============================================================================
+        -         MessageRateHz::Float64 => (
+        -             0.0;
+        -             access = AccessMode.READABLE
+        -         )
+        -         WorkRateHz::Float64 => (
+        -             0.0;
+        -             access = AccessMode.READABLE
+        -         )
+        - 
+        -         # =============================================================================
+        -         # GC Statistics (mirrored from Base.GC_Num)
+        -         # =============================================================================
+        -         $(gc_keys...)
+        -     end)
+        - end

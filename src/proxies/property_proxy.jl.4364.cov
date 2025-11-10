@@ -1,0 +1,133 @@
+        - """
+        -     PropertyProxy
+        - 
+        - Proxy for publishing property values to multiple output streams.
+        - 
+        - Contains minimal components for Aeron message publishing with stream selection.
+        - The `publications` vector enables routing to different streams based on index.
+        - 
+        - # Fields
+        - - `position_ptr::Base.RefValue{Int64}`: current buffer position for SBE encoding
+        - - `publications::Vector{Aeron.ExclusivePublication}`: multiple output streams
+        - - `buffer::Vector{UInt8}`: reusable buffer for message construction
+        - """
+        - struct PropertyProxy
+        -     position_ptr::Base.RefValue{Int64}
+        -     publications::Vector{Aeron.ExclusivePublication}
+        -     buffer::Vector{UInt8}
+        -     function PropertyProxy(publications::Vector{Aeron.ExclusivePublication})
+       30         new(Ref{Int64}(0), publications, zeros(UInt8, 256))
+        -     end
+        - end
+        - 
+        - """
+        -     publish_property(proxy, stream_index, field, value, tag, correlation_id, timestamp_ns)
+        - 
+        - Publish a property value to the specified output stream with SBE encoding.
+        - 
+        - Routes to the output stream by index and handles buffer claiming and message encoding.
+        - Returns `nothing` on success or when no subscribers are present.
+        - 
+        - # Arguments
+        - - `stream_index::Int`: 1-based index into the publications vector
+        - - `field::Symbol`: property field name
+        - - `value`: property value (string, char, number, symbol, or tuple)
+        - - `tag::AbstractString`: message tag for identification
+        - - `correlation_id::Int64`: unique correlation identifier
+        - - `timestamp_ns::Int64`: message timestamp in nanoseconds
+        - """
+      808 function publish_property(
+        -     proxy::PropertyProxy,
+        -     stream_index::Int,
+        -     field::Symbol,
+        -     value::T,
+        -     tag::AbstractString,
+        -     correlation_id::Int64,
+        -     timestamp_ns::Int64) where {T<:Union{AbstractString,Char,Real,Nothing,Symbol,Tuple}}
+        - 
+        -     # Calculate buffer length needed
+      808     len = sbe_encoded_length(MessageHeader) +
+        -           sbe_block_length(EventMessage) +
+        -           SpidersMessageCodecs.value_header_length(EventMessage) +
+        -           sizeof(value)
+        - 
+        -     # Try to claim the buffer
+      808     claim = try_claim(proxy.publications[stream_index], len)
+        - 
+        -     # If claiming the buffer fails, return early
+     1616     isnothing(claim) && return
+        - 
+        -     # Create the message encoder
+      808     encoder = EventMessageEncoder(Aeron.buffer(claim); position_ptr=proxy.position_ptr)
+      808     header = SpidersMessageCodecs.header(encoder)
+        - 
+        -     # Fill in the message
+      808     SpidersMessageCodecs.timestampNs!(header, timestamp_ns)
+      808     SpidersMessageCodecs.correlationId!(header, correlation_id)
+    25856     SpidersMessageCodecs.tag!(header, tag)
+      808     SpidersMessageCodecs.format!(encoder, convert(SpidersMessageCodecs.Format.SbeEnum, T))
+    25856     SpidersMessageCodecs.key!(encoder, field)
+     1414     SpidersMessageCodecs.value!(encoder, value)
+        - 
+        -     # Commit the message
+      808     Aeron.commit(claim)
+        - 
+      808     nothing
+        - end
+        - 
+        - """
+        -     publish_property(proxy, stream_index, field, value::AbstractArray, tag, correlation_id, timestamp_ns)
+        - 
+        - Publish an array property value with SBE tensor encoding.
+        - 
+        - Routes to the specified output stream by index with efficient tensor format.
+        - """
+      202 function publish_property(
+        -     proxy::PropertyProxy,
+        -     stream_index::Int,
+        -     field::Symbol,
+        -     value::T,
+        -     tag::AbstractString,
+        -     correlation_id::Int64,
+        -     timestamp_ns::Int64) where {T<:AbstractArray}
+        - 
+        -     # Calculate array data length
+      202     len = sizeof(eltype(value)) * length(value)
+        - 
+        -     # Create tensor message
+      202     encoder = TensorMessageEncoder(proxy.buffer; position_ptr=proxy.position_ptr)
+      202     header = SpidersMessageCodecs.header(encoder)
+      202     SpidersMessageCodecs.timestampNs!(header, timestamp_ns)
+      202     SpidersMessageCodecs.correlationId!(header, correlation_id)
+     6464     SpidersMessageCodecs.tag!(header, field)
+      202     SpidersMessageCodecs.format!(encoder, convert(SpidersMessageCodecs.Format.SbeEnum, eltype(value)))
+      202     SpidersMessageCodecs.majorOrder!(encoder, SpidersMessageCodecs.MajorOrder.COLUMN)
+      404     SpidersMessageCodecs.dims!(encoder, Int32.(size(value)))
+      202     SpidersMessageCodecs.origin!(encoder, nothing)
+      202     @inbounds SpidersMessageCodecs.values_length!(encoder, len)
+      202     SpidersMessageCodecs.sbe_position!(encoder, sbe_position(encoder) + SpidersMessageCodecs.values_header_length(encoder))
+      202     tensor_message = convert(AbstractArray{UInt8}, encoder)
+        - 
+        -     # Offer the combined message
+      202     offer(proxy.publications[stream_index],
+        -         (
+        -             tensor_message,
+        -             vec(reinterpret(UInt8, value))
+        -         )
+        -     )
+        - 
+      202     nothing
+        - end
+        - 
+        - function publish_property(
+        -     proxy::PropertyProxy,
+        -     stream_index::Int,
+        -     field::Symbol,
+        -     value,
+        -     tag::AbstractString,
+        -     correlation_id::Int64,
+        -     timestamp_ns::Int64)
+        - 
+        -     # Fallback for unsupported types - treat as nothing
+        -     publish_property(proxy, stream_index, field, nothing, tag, correlation_id, timestamp_ns)
+        - end

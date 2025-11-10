@@ -1,0 +1,19 @@
+        - # Stopped state handlers
+        - 
+        - @statedef AbstractRtcAgent :Stopped :Ready
+        - 
+        - @on_event function (sm::AbstractRtcAgent, ::Stopped, ::Play, _)
+        -     # # Only transition if all properties are set
+        -     # if allkeysset(sm.properties)
+        -     #     return Hsm.transition!(sm, :Playing)
+        -     # else
+        -     #     throw(ErrorException("Cannot transition to Playing: not all properties are set"))
+        -     # end
+        - 
+        -     # return Hsm.EventHandled
+        1     Hsm.transition!(sm, :Playing)
+        - end
+        - 
+        - @on_event function (sm::AbstractRtcAgent, ::Stopped, ::Pause, _)
+        0     Hsm.transition!(sm, :Paused)
+        - end

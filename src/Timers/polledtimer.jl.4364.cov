@@ -1,0 +1,177 @@
+        - """
+        -     TimerEntry{E}
+        - 
+        - Entry in the timer queue with deadline, ID, and associated event.
+        - 
+        - Contains deadline for ordering, unique ID for cancellation, and event payload.
+        - """
+        - struct TimerEntry{E}
+      737     deadline::Int64
+        -     id::Int64
+        -     event::E
+        - end
+        - 
+        - # Custom comparison for reverse sorting (latest deadline first) without allocations
+     3402 Base.isless(a::TimerEntry, b::TimerEntry) = a.deadline > b.deadline
+        - 
+        - """
+        -     PolledTimer{C,E}
+        - 
+        - Zero-allocation timer scheduler using a sorted vector for efficient polling.
+        - 
+        - Maintains timers in deadline order for O(1) next-timer queries. Uses reverse
+        - sorting (latest first) to optimize common polling patterns.
+        - 
+        - # Type Parameters
+        - - `C<:Clocks.AbstractClock`: clock implementation for timing operations
+        - - `E`: event type stored with timer entries (typically Symbol)
+        - 
+        - # Fields
+        - - `clock::C`: timing source for deadline calculations
+        - - `timers::Vector{TimerEntry{E}}`: sorted timer queue (reverse deadline order)
+        - - `next_id::Int64`: incrementing ID generator for timer identification
+        - """
+        - mutable struct PolledTimer{C<:Clocks.AbstractClock,E}
+        -     clock::C
+        -     timers::Vector{TimerEntry{E}}
+        -     next_id::Int64
+        - 
+        -     function PolledTimer{C,E}(clock::C) where {C<:Clocks.AbstractClock,E}
+       37         timers = TimerEntry{E}[]
+        -         @static if VERSION >= v"1.11"
+       37             sizehint!(timers, 100; shrink=false)
+        -         else
+        -             sizehint!(timers, 100)
+        -         end
+       37         new{C,E}(clock, timers, 1)
+        -     end
+        - end
+        - 
+        - # Convenience constructor for Symbol events (most common case)
+       37 PolledTimer(clock::C) where C<:Clocks.AbstractClock = PolledTimer{C, Symbol}(clock)
+        - 
+        - """
+        -     schedule!(timer::PolledTimer, delay_ns::Int64, event) -> Int64
+        - 
+        - Schedule a timer event with a relative delay from now.
+        - Returns the timer ID for potential cancellation.
+        - """
+        - function schedule!(timer::PolledTimer, delay_ns::Int64, event)
+      392     if delay_ns < 0
+        0         throw(InvalidTimerError("Timer delay cannot be negative: $(delay_ns)"))
+        -     end
+        -     
+      392     now = time_nanos(timer.clock)
+      392     return schedule_at!(timer, now + delay_ns, event)
+        - end
+        - 
+        - """
+        -     schedule_at!(timer::PolledTimer, deadline::Int64, event) -> Int64
+        - 
+        - Schedule a timer to fire at the given absolute deadline with the associated event.
+        - Returns the timer ID for potential cancellation.
+        - """
+        - function schedule_at!(timer::PolledTimer, deadline::Int64, event)
+      737     now = time_nanos(timer.clock)
+      737     if deadline < now
+        0         throw(TimerSchedulingError("Cannot schedule timer in the past", deadline))
+        -     end
+        -     
+      737     timer_id = timer.next_id
+      737     timer.next_id += 1
+        - 
+      737     entry = TimerEntry(deadline, timer_id, event)
+        - 
+        -     # Insert in reverse sorted order using custom isless (zero allocations)
+      737     insert_index = searchsortedfirst(timer.timers, entry)
+      737     insert!(timer.timers, insert_index, entry)
+        - 
+      737     return timer_id
+        - end
+        - 
+        - """
+        -     cancel!(timer::PolledTimer, timer_id::Int64) -> Bool
+        - 
+        - Cancel a scheduled timer. Returns true if the timer was found and cancelled.
+        - """
+        - function cancel!(timer::PolledTimer, timer_id::Int64)
+        3     index = findfirst(t -> t.id == timer_id, timer.timers)
+        1     if index !== nothing
+        1         deleteat!(timer.timers, index)
+        1         return true
+        -     end
+        0     return false
+        - end
+        - 
+        - """
+        -     cancel!(timer::PolledTimer, event) -> Int
+        - 
+        - Cancel all timers associated with a specific event.
+        - Returns the number of timers cancelled.
+        - """
+        - function cancel!(timer::PolledTimer, event)
+        1     len = length(timer.timers)
+        2     filter!(t -> t.event != event, timer.timers)
+        1     return len - length(timer.timers)
+        - end
+        - 
+        - """
+        -     cancel!(timer::PolledTimer) -> Int
+        - 
+        - Cancel all active timers.
+        - Returns the number of timers cancelled.
+        - """
+        - function cancel!(timer::PolledTimer)
+       12     cancelled_count = length(timer.timers)
+       12     empty!(timer.timers)
+       12     return cancelled_count
+        - end
+        - 
+        - """
+        -     poll(handler, timer::PolledTimer, clientd) -> Int
+        - 
+        - Poll for expired timers and call handler for each one.
+        - Returns the number of timers that fired.
+        - """
+        - @inline function poll(handler, timer::PolledTimer, clientd)
+101920849     now = time_nanos(timer.clock)
+101920849     fired_count = 0
+        - 
+        -     # Process expired timers from the end of the reverse-sorted vector
+101921194     while !isempty(timer.timers) && timer.timers[end].deadline <= now
+      345         expired_timer = pop!(timer.timers)
+      345         handler(expired_timer.event, now, clientd)
+      345         fired_count += 1
+      345     end
+        - 
+101920849     return fired_count
+        - end
+        - 
+        - """
+        -     event(timer::PolledTimer, timer_id::Int64)
+        - 
+        - Get the event associated with a timer ID.
+        - Returns `nothing` if the timer ID is not found.
+        - """
+        - function event(timer::PolledTimer, timer_id::Int64)
+        -     for t in timer.timers
+        -         if t.id == timer_id
+        -             return t.event
+        -         end
+        -     end
+        -     return nothing
+        - end
+        - 
+        - """
+        -     length(timer::PolledTimer) -> Int
+        - 
+        - Get the number of active timers.
+        - """
+        3 Base.length(timer::PolledTimer) = length(timer.timers)
+        - 
+        - """
+        -     isempty(timer::PolledTimer) -> Bool
+        - 
+        - Check if there are any active timers.
+        - """
+        3 Base.isempty(timer::PolledTimer) = isempty(timer.timers)

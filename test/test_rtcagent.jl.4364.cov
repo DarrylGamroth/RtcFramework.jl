@@ -1,0 +1,170 @@
+        - """
+        - Test suite for RtcAgent core functionality.
+        - Tests agent construction, lifecycle, and integration with Agent.jl framework.
+        - """
+        1 function test_rtcagent(client)
+        1     @testset "RtcAgent Construction" begin
+        -         # Test basic construction with dependency injection
+        3         clock = CachedEpochClock(EpochClock())
+        1         properties = TestAgent.Properties(clock)
+        1         comms = CommunicationResources(client, properties)
+        1         base_agent = BaseRtcAgent(comms, properties, clock)
+        1         agent = TestAgent.RtcAgent(base_agent)
+        - 
+        1         @test agent isa TestAgent.RtcAgent
+        1         @test base(agent).source_correlation_id == 0
+        1         @test base(agent).comms === comms
+        2         @test !isnothing(base(agent).clock)
+        2         @test !isnothing(base(agent).properties)
+        2         @test !isnothing(base(agent).id_gen)
+        2         @test !isnothing(base(agent).timers)
+        1         @test isempty(base(agent).publication_configs)
+        1         @test base(agent).control_adapter === nothing  # Not yet initialized
+        1         @test isempty(base(agent).input_adapters)      # Not yet initialized
+        1         @test base(agent).status_proxy === nothing     # Not yet initialized
+        1         @test base(agent).property_proxy === nothing   # Not yet initialized
+        - 
+        -         # Test construction with specific clock
+        -         @testset "Agent should handle specific clock" begin
+        3             clock2 = CachedEpochClock(EpochClock())
+        1             properties2 = TestAgent.Properties(clock2)
+        1             comms2 = CommunicationResources(client, properties2)
+        1             base_agent2 = BaseRtcAgent(comms2, properties2, clock2)
+        1             agent2 = TestAgent.RtcAgent(base_agent2)
+        1             @test base(agent2).clock === clock2
+        -         end
+        -     end
+        - 
+        -     @testset "Communication Lifecycle" begin
+        3         clock = CachedEpochClock(EpochClock())
+        1         properties = TestAgent.Properties(clock)
+        1         comms = CommunicationResources(client, properties)
+        1         base_agent = BaseRtcAgent(comms, properties, clock)
+        1         agent = TestAgent.RtcAgent(base_agent)
+        - 
+        -         # Test initial state - communication resources are already created
+        2         @test !isnothing(base(agent).comms)
+        1         @test base(agent).comms isa CommunicationResources
+        1         @test base(agent).control_adapter === nothing
+        1         @test isempty(base(agent).input_adapters)
+        - 
+        -         # Test that Agent.on_start creates adapters
+        1         Agent.on_start(agent)
+        4         @test !isnothing(base(agent).control_adapter)
+        -         # NOTE: input_adapters might be empty if no input streams are configured
+        - 
+        -     # Close via state machine: dispatch :Exit to trigger Top @on_exit cleanup
+        3     @test_throws AgentTerminationException dispatch!(agent, :Exit)
+        1         @test base(agent).control_adapter === nothing
+        1         @test isempty(base(agent).input_adapters)
+        - 
+        -         # Close external resources via Agent.on_close
+        1         Agent.on_close(agent)
+        -     end
+        - 
+        -     @testset "Agent Interface Implementation" begin
+        3         clock = CachedEpochClock(EpochClock())
+        1         properties = TestAgent.Properties(clock)
+        1         comms = CommunicationResources(client, properties)
+        1         base_agent = BaseRtcAgent(comms, properties, clock)
+        1         agent = TestAgent.RtcAgent(base_agent)
+        - 
+        -         # Test Agent.name
+        2         name = Agent.name(agent)
+        1         @test name isa String
+        1         @test name == base(agent).properties[:Name]
+        - 
+        -         # Test Agent.on_start - creates adapters
+        1         result = Agent.on_start(agent)
+        1         @test result === nothing
+        4         @test !isnothing(base(agent).control_adapter)
+        - 
+        -         # Test Agent.do_work
+        1         work_count = Agent.do_work(agent)
+        1         @test work_count isa Int
+        1         @test work_count >= 0
+        - 
+        -     # Cleanup via HSM first, then Agent
+        3     @test_throws AgentTerminationException dispatch!(agent, :Exit)
+        1         Agent.on_close(agent)
+        1         @test base(agent).control_adapter === nothing
+        1         @test isempty(base(agent).input_adapters)
+        -     end
+        - 
+        -     @testset "Dispatch System" begin
+        3         clock = CachedEpochClock(EpochClock())
+        1         properties = TestAgent.Properties(clock)
+        1         comms = CommunicationResources(client, properties)
+        1         base_agent = BaseRtcAgent(comms, properties, clock)
+        1         agent = TestAgent.RtcAgent(base_agent)
+        - 
+        -         # Test dispatch! function exists and handles events
+        1         @test_nowarn dispatch!(agent, :TestEvent)
+        1         @test_nowarn dispatch!(agent, :AnotherEvent, "test message")
+        -     end
+        - 
+        -     @testset "Property Registry Management" begin
+        3         clock = CachedEpochClock(EpochClock())
+        1         properties = TestAgent.Properties(clock)
+        1         comms = CommunicationResources(client, properties)
+        1         base_agent = BaseRtcAgent(comms, properties, clock)
+        1         agent = TestAgent.RtcAgent(base_agent)
+        - 
+        -         # Test property registry operations
+        1         @test isempty(base(agent).publication_configs)
+        2         @test !isregistered_property(agent, :TestProperty)
+        -     end
+        - 
+        -     @testset "Error Handling" begin
+        3         clock = CachedEpochClock(EpochClock())
+        1         properties = TestAgent.Properties(clock)
+        1         comms = CommunicationResources(client, properties)
+        1         base_agent = BaseRtcAgent(comms, properties, clock)
+        1         agent = TestAgent.RtcAgent(base_agent)
+        - 
+        -         # Test that agent handles work loop and shutdown gracefully
+        1         @test_nowarn Agent.on_start(agent)
+        1         @test_nowarn Agent.do_work(agent)
+        3         @test_throws AgentTerminationException dispatch!(agent, :Exit)
+        1         @test_nowarn Agent.on_close(agent)
+        - 
+        -         # Test multiple start/exit/close cycles with new agent AND communication instances
+        1         comms2 = CommunicationResources(client, properties)
+        1         agent2 = TestAgent.RtcAgent(BaseRtcAgent(comms2, properties, clock))
+        1         @test_nowarn Agent.on_start(agent2)
+        3         @test_throws AgentTerminationException dispatch!(agent2, :Exit)
+        1         @test_nowarn Agent.on_close(agent2)
+        - 
+        1         comms3 = CommunicationResources(client, properties)
+        1         agent3 = TestAgent.RtcAgent(BaseRtcAgent(comms3, properties, clock))
+        1         @test_nowarn Agent.on_start(agent3)
+        3         @test_throws AgentTerminationException dispatch!(agent3, :Exit)
+        1         @test_nowarn Agent.on_close(agent3)
+        -     end
+        - 
+        -     @testset "Work Loop Components" begin
+        2         clock = CachedEpochClock(EpochClock())
+        1         properties = TestAgent.Properties(clock)
+        1         comms = CommunicationResources(client, properties)
+        1         base_agent = BaseRtcAgent(comms, properties, clock)
+        1         agent = TestAgent.RtcAgent(base_agent)
+        - 
+        1         Agent.on_start(agent)
+        - 
+        -         # Test individual work components - these are internal functions
+        1         @test RtcFramework.control_poller(agent) isa Int
+        1         @test RtcFramework.input_poller(agent) isa Int
+        1         @test RtcFramework.timer_poller(agent) isa Int
+        1         @test RtcFramework.property_poller(agent) isa Int
+        - 
+        -         # All should return 0 in test environment (no actual work)
+        1         @test RtcFramework.control_poller(agent) == 0
+        1         @test RtcFramework.input_poller(agent) == 0
+        1         @test RtcFramework.timer_poller(agent) >= 0  # May have timer work
+        1         @test RtcFramework.property_poller(agent) >= 0  # May publish properties
+        - 
+        -     # Cleanup via HSM then Agent
+        3     @test_throws AgentTerminationException dispatch!(agent, :Exit)
+        1         Agent.on_close(agent)
+        -     end
+        - end

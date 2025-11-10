@@ -1,0 +1,237 @@
+        - """
+        -     BaseRtcAgent{C,P,ID,ET}
+        - 
+        - Base structure for real-time control agent with hierarchical state machine and communication.
+        - 
+        - Manages event dispatch, property publishing, timer scheduling, and state
+        - transitions. Generic parameters allow customization of core components.
+        - 
+        - # Type Parameters
+        - - `C<:AbstractClock`: clock implementation for timing operations
+        - - `P<:AbstractStaticKV`: property store implementation
+        - - `ID<:SnowflakeIdGenerator`: unique ID generator for correlation
+        - - `ET<:PolledTimer`: timer implementation for scheduled operations
+        - 
+        - # Fields
+        - - `clock::C`: timing source for all operations
+        - - `properties::P`: agent configuration and runtime properties
+        - - `id_gen::ID`: correlation ID generator
+        - - `source_correlation_id::Int64`: correlation ID of current event being processed
+        - - `timers::ET`: timer scheduler for periodic operations
+        - - `comms::CommunicationResources`: Aeron stream management
+        - - `status_proxy::Union{Nothing,StatusProxy}`: status publishing interface
+        - - `property_proxy::Union{Nothing,PropertyProxy}`: property publishing interface
+        - - `control_adapter::Union{Nothing,ControlStreamAdapter}`: control message handler
+        - - `input_adapters::Vector{InputStreamAdapter}`: input stream processors
+        - - `publication_configs::Vector{PublicationConfig}`: property publication configurations
+        - - `poller_registry::PollerRegistry`: poller management with deferred add/remove
+        - - `counters::Counters`: Aeron-allocated performance counters for external observability
+        - - `last_stats_time::Int64`: timestamp of last stats update (nanoseconds)
+        - - `last_msg_count::Int64`: message count at last stats update (for rate calculation)
+        - - `last_work_count::Int64`: work count at last stats update (for rate calculation)
+        - """
+        - mutable struct BaseRtcAgent{C<:AbstractClock,P<:AbstractStaticKV,ID<:SnowflakeIdGenerator,ET<:PolledTimer}
+       36     clock::C
+        -     properties::P
+        -     id_gen::ID
+        -     source_correlation_id::Int64
+        -     timers::ET
+        -     comms::CommunicationResources
+        -     status_proxy::Union{Nothing,StatusProxy}
+        -     property_proxy::Union{Nothing,PropertyProxy}
+        -     control_adapter::Union{Nothing,ControlStreamAdapter}
+        -     input_adapters::Vector{InputStreamAdapter}
+        -     publication_configs::Vector{PublicationConfig}
+        -     poller_registry::PollerRegistry
+        -     counters::Counters
+        -     last_stats_time::Int64
+        -     last_msg_count::Int64
+        -     last_work_count::Int64
+        - end
+        - 
+       36 function BaseRtcAgent(comms::CommunicationResources, properties::AbstractStaticKV, clock::C=CachedEpochClock(EpochClock())) where {C<:Clocks.AbstractClock}
+       36     fetch!(clock)
+        - 
+       72     id_gen = SnowflakeIdGenerator(properties[:NodeId], clock)
+       36     timers = PolledTimer(clock)
+        - 
+        -     # Allocate Aeron counters for observability with agent identification
+       72     agent_id = properties[:NodeId]
+       72     agent_name = properties[:Name]
+       36     counters = Counters(comms.client, agent_id, agent_name)
+        - 
+        -     # Create the agent with proxy fields initialized to nothing
+       36     BaseRtcAgent(
+        -         clock,
+        -         properties,
+        -         id_gen,
+        -         0,
+        -         timers,
+        -         comms,
+        -         nothing,
+        -         nothing,
+        -         nothing,
+        -         InputStreamAdapter[],
+        -         PublicationConfig[],
+        -         PollerRegistry(),
+        -         counters,
+        -         0,
+        -         0,
+        -         0
+        -     )
+        - end
+        - 
+        - # =============================================================================
+        - # Agent.jl Protocol Implementation
+        - # =============================================================================
+        - 
+        - """
+        -     Agent.name(agent::AbstractRtcAgent)
+        - 
+        - Get the name of this agent from its property store.
+        - """
+        2 Agent.name(agent::AbstractRtcAgent) = properties(agent)[:Name]
+        - 
+        - """
+        -     Agent.on_start(agent::AbstractRtcAgent)
+        - 
+        - Initialize the agent by setting up communications and starting the state machine.
+        - 
+        - Creates control and input stream adapters, and status/property proxies.
+        - """
+       28 function Agent.on_start(agent::AbstractRtcAgent)
+       28     @info "Starting agent $(Agent.name(agent))"
+        - 
+       28     dispatch!(agent, :AgentStarted)
+        - end
+        - 
+        - """
+        -     Agent.on_close(agent::AbstractRtcAgent)
+        - 
+        - Shutdown the agent by tearing down communications and stopping timers.
+        - 
+        - Cancels all timers, closes communication resources, and clears adapters/proxies.
+        - """
+       29 function Agent.on_close(agent::AbstractRtcAgent)
+       29     @info "Stopping agent $(Agent.name(agent))"
+        - 
+       29     b = base(agent)
+        - 
+        -     # Close counters
+       29     close(b.counters)
+        - 
+        -     # Close communication resources
+       29     close(b.comms)
+        - end
+        - 
+        - """
+        -     Agent.on_error(agent::AbstractRtcAgent, error)
+        - 
+        - Handle agent errors by logging them.
+        - """
+        - function Agent.on_error(agent::AbstractRtcAgent, error)
+        -     @error "Error in agent $(Agent.name(agent)):" exception = (error, catch_backtrace())
+        - end
+        - 
+        - """
+        -     Agent.do_work(agent::AbstractRtcAgent)
+        - 
+        - Perform one unit of work by polling all registered pollers in priority order.
+        - 
+        - Updates the clock and executes all pollers (built-in and custom) sorted by priority.
+        - Applies any pending add/remove operations after the poll cycle completes.
+        - Returns the total number of work items processed.
+        - """
+101920861 function Agent.do_work(agent::AbstractRtcAgent)
+101920861     b = base(agent)
+101920861     fetch!(b.clock)
+        - 
+101920861     work_count = poll(b.poller_registry, agent)
+        - 
+101920861     counters = b.counters
+101920861     Aeron.increment!(counters.total_duty_cycles)
+101920861     Aeron.increment!(counters.total_work_done, work_count)
+        - 
+101920861     return work_count
+        - end
+        - 
+        - # =============================================================================
+        - # Polling Functions
+        - # =============================================================================
+        - 
+        - """
+        -     input_poller(agent::AbstractRtcAgent) -> Int
+        - 
+        - Poll all input streams for incoming data messages using input stream adapters.
+        - 
+        - Returns the number of fragments processed.
+        - """
+        - function input_poller(agent::AbstractRtcAgent)
+101920849     b = base(agent)
+101920849     poll(b.input_adapters, DEFAULT_INPUT_FRAGMENT_COUNT_LIMIT)
+        - end
+        - 
+        - """
+        -     control_poller(agent::AbstractRtcAgent) -> Int
+        - 
+        - Poll the control stream for incoming control messages using the control stream adapter.
+        - 
+        - Returns the number of fragments processed.
+        - """
+101920849 function control_poller(agent::AbstractRtcAgent)
+101920849     b = base(agent)
+203841698     isnothing(b.control_adapter) && return 0
+101920849     poll(b.control_adapter, DEFAULT_CONTROL_FRAGMENT_COUNT_LIMIT)
+        - end
+        - 
+        - """
+        -     timer_poller(agent::AbstractRtcAgent) -> Int
+        - 
+        - Poll the timer system for expired timers and dispatch their events.
+        - 
+        - Returns the number of timers that fired.
+        - """
+        - function timer_poller(agent::AbstractRtcAgent)
+101920849     Timers.poll(timers(agent), agent) do event, now, agent
+      345         b = base(agent)
+      345         b.source_correlation_id = next_id(b.id_gen)
+      345         dispatch!(agent, event, now)
+        -     end
+        - end
+        - 
+        - """
+        -     property_poller(agent::AbstractRtcAgent) -> Int
+        - 
+        - Poll all registered properties and dispatch publish events when strategies indicate.
+        - 
+        - Checks publication strategies for each registered property. When a property should
+        - be published, dispatches a :PublishProperty event with the config, updates timing
+        - state, and counts the dispatch. Returns the number of properties that should publish.
+        - """
+101920848 function property_poller(agent::AbstractRtcAgent)
+101920848     b = base(agent)
+101920848     registry = b.publication_configs
+101920848     isempty(registry) && return 0
+        - 
+        0     now = time_nanos(b.clock)
+        0     count = 0
+        - 
+        0     for config in registry
+        0         property_timestamp_ns = last_update(b.properties, config.field)
+        - 
+        0         if should_publish(config.strategy, config.last_published_ns,
+        -             config.next_scheduled_ns, property_timestamp_ns, now)
+        0             b.source_correlation_id = next_id(b.id_gen)
+        0             dispatch!(agent, :PublishProperty, config)
+        0             config.last_published_ns = now
+        0             config.next_scheduled_ns = next_time(config.strategy, now)
+        0             count += 1
+        -         end
+        0     end
+        - 
+        0     if count > 0
+        0         Aeron.increment!(b.counters.properties_published, count)
+        -     end
+        - 
+        0     return count
+        - end
