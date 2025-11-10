@@ -46,6 +46,7 @@ include("test_pollers.jl")
 include("test_accessors.jl")
 include("test_integration.jl")
 include("test_onupdate_integration.jl")
+include("test_proxy_allocations.jl")
 
 # Run all test suites with organized structure
 @testset "RtcFramework.jl Tests" begin
@@ -105,6 +106,10 @@ include("test_onupdate_integration.jl")
 
                 @testset "OnUpdate Integration Tests" begin
                     test_onupdate_with_cached_timer(client)
+                end
+
+                @testset "Proxy Allocation Tests" begin
+                    test_proxy_allocations.run_tests(client)
                 end
             end
         end
