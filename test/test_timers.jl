@@ -44,6 +44,46 @@ function test_timers(client)
         Agent.on_close(agent)
     end
     
+    @testset "Timer Exceptions" begin
+        # Test TimerNotFoundError
+        err = RtcFramework.Timers.TimerNotFoundError(12345)
+        @test err.timer_id == 12345
+        
+        io = IOBuffer()
+        showerror(io, err)
+        msg = String(take!(io))
+        @test contains(msg, "TimerNotFoundError")
+        @test contains(msg, "12345")
+        
+        # Test InvalidTimerError
+        err = RtcFramework.Timers.InvalidTimerError("Invalid deadline")
+        @test err.message == "Invalid deadline"
+        
+        io = IOBuffer()
+        showerror(io, err)
+        msg = String(take!(io))
+        @test contains(msg, "InvalidTimerError")
+        @test contains(msg, "Invalid deadline")
+        
+        # Test TimerSchedulingError
+        err = RtcFramework.Timers.TimerSchedulingError("Deadline in past", 1000)
+        @test err.message == "Deadline in past"
+        @test err.deadline == 1000
+        
+        io = IOBuffer()
+        showerror(io, err)
+        msg = String(take!(io))
+        @test contains(msg, "TimerSchedulingError")
+        @test contains(msg, "Deadline in past")
+        @test contains(msg, "1000")
+        
+        # Test exception type hierarchy
+        @test RtcFramework.Timers.TimerNotFoundError <: RtcFramework.Timers.TimerError
+        @test RtcFramework.Timers.InvalidTimerError <: RtcFramework.Timers.TimerError
+        @test RtcFramework.Timers.TimerSchedulingError <: RtcFramework.Timers.TimerError
+        @test RtcFramework.Timers.TimerError <: Exception
+    end
+    
     # Additional timer tests would go here
     # - Timer firing tests (with clock mocking)
     # - Multiple timer management

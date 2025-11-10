@@ -38,6 +38,7 @@ include("test_counters.jl")
 include("test_rtcagent.jl")
 include("test_adapters.jl")
 include("test_property_publishing.jl")
+include("test_property_registration.jl")
 include("test_communications.jl")
 include("test_property_store.jl")
 include("test_timers.jl")
@@ -79,6 +80,10 @@ include("test_proxy_allocations.jl")
 
                 @testset "Property Publishing Tests" begin
                     test_property_publishing(client)
+                end
+
+                @testset "Property Registration Tests" begin
+                    test_property_registration(client)
                 end
 
                 @testset "Communications Tests" begin
