@@ -16,7 +16,7 @@ struct PropertyProxy
     publications::Vector{Aeron.ExclusivePublication}
     buffer::Vector{UInt8}
     function PropertyProxy(publications::Vector{Aeron.ExclusivePublication})
-        new(Ref{Int64}(0), publications, zeros(UInt8, 1024))
+        new(Ref{Int64}(0), publications, zeros(UInt8, 256))
     end
 end
 
@@ -53,10 +53,9 @@ function publish_property(
 
     # Try to claim the buffer
     claim = try_claim(proxy.publications[stream_index], len)
-    if isnothing(claim)
-        # No subscribers - skip publishing
-        return nothing
-    end
+
+    # If claiming the buffer fails, return early
+    isnothing(claim) && return
 
     # Create the message encoder
     encoder = EventMessageEncoder(Aeron.buffer(claim); position_ptr=proxy.position_ptr)
@@ -66,8 +65,9 @@ function publish_property(
     SpidersMessageCodecs.timestampNs!(header, timestamp_ns)
     SpidersMessageCodecs.correlationId!(header, correlation_id)
     SpidersMessageCodecs.tag!(header, tag)
+    SpidersMessageCodecs.format!(encoder, convert(SpidersMessageCodecs.Format.SbeEnum, T))
     SpidersMessageCodecs.key!(encoder, field)
-    encode(encoder, value)
+    SpidersMessageCodecs.value!(encoder, value)
 
     # Commit the message
     Aeron.commit(claim)

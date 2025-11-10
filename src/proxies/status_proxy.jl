@@ -16,7 +16,7 @@ struct StatusProxy
     publication::Aeron.ExclusivePublication
     buffer::Vector{UInt8}
     function StatusProxy(publication::Aeron.ExclusivePublication)
-        new(Ref{Int64}(0), publication, zeros(UInt8, 1024))
+        new(Ref{Int64}(0), publication, zeros(UInt8, 512))
     end
 end
 
@@ -44,10 +44,9 @@ function publish_status_event(
 
     # Try to claim the buffer
     claim = try_claim(proxy.publication, len)
-    if isnothing(claim)
-        # No subscribers - skip publishing
-        return nothing
-    end
+
+    # If claiming the buffer fails, return early
+    isnothing(claim) && return
 
     # Create the message encoder
     encoder = EventMessageEncoder(Aeron.buffer(claim); position_ptr=proxy.position_ptr)
@@ -57,8 +56,9 @@ function publish_status_event(
     SpidersMessageCodecs.timestampNs!(header, timestamp_ns)
     SpidersMessageCodecs.correlationId!(header, correlation_id)
     SpidersMessageCodecs.tag!(header, tag)
+    SpidersMessageCodecs.format!(encoder, convert(SpidersMessageCodecs.Format.SbeEnum, T))
     SpidersMessageCodecs.key!(encoder, field)
-    encode(encoder, value)
+    SpidersMessageCodecs.value!(encoder, value)
 
     # Commit the message
     Aeron.commit(claim)
@@ -85,8 +85,8 @@ function publish_status_event(
     SpidersMessageCodecs.timestampNs!(header, timestamp_ns)
     SpidersMessageCodecs.correlationId!(header, correlation_id)
     SpidersMessageCodecs.tag!(header, tag)
-    SpidersMessageCodecs.key!(encoder, field)
     SpidersMessageCodecs.format!(encoder, convert(SpidersMessageCodecs.Format.SbeEnum, String))
+    SpidersMessageCodecs.key!(encoder, field)
     @inbounds SpidersMessageCodecs.value_length!(encoder, len)
     # value_length! doesn't increment the position, so we need to do it manually
     SpidersMessageCodecs.sbe_position!(encoder, sbe_position(encoder) + SpidersMessageCodecs.value_header_length(encoder))
